@@ -300,10 +300,12 @@ add_library(basalt SHARED)
 # To support cmake < 3.13, use absolute paths (see: https://crascit.com/2016/01/31/enhanced-source-file-handling-with-target_sources/)
 target_sources(basalt
   PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/allan_variance.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/aprilgrid.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/calibration_helper.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/cam_calib.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/cam_imu_calib.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/imu_calib.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/vignette.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/device/rs_t265.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/hash_bow/hash_bow.h
@@ -360,6 +362,7 @@ target_sources(basalt
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/vi_estimator/sqrt_keypoint_vo.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/vi_estimator/vio_estimator.h
   PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/allan_variance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/aprilgrid.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/calibraiton_helper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/vignette.cpp
@@ -394,10 +397,13 @@ target_compile_definitions(basalt PUBLIC ${BASALT_COMPILE_DEFINITIONS})
 #target_compile_definitions(basalt PUBLIC BASALT_DISABLE_ASSERTS)
 
 
-add_executable(basalt_calibrate src/calibrate.cpp src/calibration/cam_calib.cpp)
-target_link_libraries(basalt_calibrate basalt pangolin basalt::cli11)
+add_executable(basalt_calibrate_cam src/calibrate_cam.cpp src/calibration/cam_calib.cpp)
+target_link_libraries(basalt_calibrate_cam basalt pangolin basalt::cli11)
 
-add_executable(basalt_calibrate_imu src/calibrate_imu.cpp src/calibration/cam_imu_calib.cpp)
+add_executable(basalt_calibrate_vi src/calibrate_cam_imu.cpp src/calibration/cam_imu_calib.cpp)
+target_link_libraries(basalt_calibrate_vi basalt pangolin basalt::cli11)
+
+add_executable(basalt_calibrate_imu src/calibrate_imu.cpp src/calibration/imu_calib.cpp)
 target_link_libraries(basalt_calibrate_imu basalt pangolin basalt::cli11)
 
 
@@ -440,7 +446,7 @@ endif()
 
 
 
-install(TARGETS basalt_calibrate basalt_calibrate_imu basalt_vio_sim basalt_mapper_sim basalt_mapper basalt_opt_flow basalt_vio basalt_kitti_eval basalt_time_alignment basalt
+install(TARGETS basalt_calibrate_vi basalt_calibrate_cam basalt_calibrate_imu basalt_vio_sim basalt_mapper_sim basalt_mapper basalt_opt_flow basalt_vio basalt_kitti_eval basalt_time_alignment basalt
   EXPORT BasaltTargets
   RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
   LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
