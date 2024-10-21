@@ -1,0 +1,10 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
+{
+	"build": {
+		"dockerfile": "Containerfile"
+	},
+	"runArgs": [
+		"-e", "DISPLAY", "-e", "QT_X11_NO_MITSHM=1", "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
+	]
+}
