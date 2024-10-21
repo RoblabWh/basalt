@@ -34,6 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <basalt/io/dataset_io.h>
+#include <basalt/io/dataset_io_dai.h>
 #include <basalt/io/dataset_io_euroc.h>
 #include <basalt/io/dataset_io_kitti.h>
 #include <basalt/io/dataset_io_rosbag.h>
@@ -43,8 +44,9 @@ namespace basalt {
 
 DatasetIoInterfacePtr DatasetIoFactory::getDatasetIo(
     const std::string &dataset_type, bool load_mocap_as_gt) {
-  if (dataset_type == "euroc") {
-    // return DatasetIoInterfacePtr();
+  if (dataset_type == "dai") {
+    return DatasetIoInterfacePtr(new DaiIO(load_mocap_as_gt));
+  } else if (dataset_type == "euroc") {
     return DatasetIoInterfacePtr(new EurocIO(load_mocap_as_gt));
   } else if (dataset_type == "bag") {
     return DatasetIoInterfacePtr(new RosbagIO);
