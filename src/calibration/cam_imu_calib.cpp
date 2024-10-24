@@ -41,6 +41,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <basalt/optimization/spline_optimize.h>
 
+#include <basalt/calibration/allan_variance.h>
+
 namespace basalt {
 
 CamImuCalib::CamImuCalib(const std::string &dataset_path,
@@ -466,17 +468,11 @@ void CamImuCalib::initOptimization() {
     }
   }
 
-  const int num_samples = 100;
-  double dt = 0.0;
-  for (int i = 0; i < num_samples; i++) {
-    dt += 1e-9 * (vio_dataset->get_gyro_data()[i + 1].timestamp_ns -
-                  vio_dataset->get_gyro_data()[i].timestamp_ns);
-  }
-  dt /= num_samples;
+  if (calib_opt->calib->imu_update_rate == 0)
+    calib_opt->calib->imu_update_rate =
+        calculateRate(vio_dataset->get_gyro_data());
 
-  std::cout << "IMU dt: " << dt << " freq: " << 1.0 / dt << std::endl;
-
-  calib_opt->calib->imu_update_rate = 1.0 / dt;
+  std::cout << "IMU freq: " << calib_opt->calib->imu_update_rate << std::endl;
 
   calib_opt->setG(g_a_init);
   calib_opt->init();
@@ -658,10 +654,16 @@ void CamImuCalib::loadDataset() {
 
     calib_opt->loadCalib(cache_path);
 
-    calib_opt->calib->accel_noise_std.setConstant(imu_noise[0]);
-    calib_opt->calib->gyro_noise_std.setConstant(imu_noise[1]);
-    calib_opt->calib->accel_bias_std.setConstant(imu_noise[2]);
-    calib_opt->calib->gyro_bias_std.setConstant(imu_noise[3]);
+    if (calib_opt->calib->imu_update_rate == 0) {
+      calib_opt->calib->accel_noise_std.setConstant(imu_noise[0]);
+      calib_opt->calib->gyro_noise_std.setConstant(imu_noise[1]);
+      calib_opt->calib->accel_bias_std.setConstant(imu_noise[2]);
+      calib_opt->calib->gyro_bias_std.setConstant(imu_noise[3]);
+
+      std::cout << "No IMU calibration found, using defaults" << std::endl;
+    } else {
+      std::cout << "Found IMU calibration" << std::endl;
+    }
   }
   calib_opt->resetMocapCalib();
 

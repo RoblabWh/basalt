@@ -69,14 +69,16 @@ class PosesOptimization {
   void resetCalib(size_t num_cams, const std::vector<std::string> &cam_types) {
     BASALT_ASSERT(cam_types.size() == num_cams);
 
-    calib.reset(new Calibration<Scalar>);
+    if (!calib) calib.reset(new Calibration<Scalar>);
 
-    for (size_t i = 0; i < cam_types.size(); i++) {
+    calib->intrinsics.clear();
+    calib->intrinsics.reserve(num_cams);
+    for (const auto &cam_type : cam_types) {
       calib->intrinsics.emplace_back(
-          GenericCamera<Scalar>::fromString(cam_types[i]));
+          GenericCamera<Scalar>::fromString(cam_type));
 
-      if (calib->intrinsics.back().getName() != cam_types[i]) {
-        std::cerr << "Unknown camera type " << cam_types[i] << " default to "
+      if (calib->intrinsics.back().getName() != cam_type) {
+        std::cerr << "Unknown camera type " << cam_type << " default to "
                   << calib->intrinsics.back().getName() << std::endl;
       }
     }
