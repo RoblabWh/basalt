@@ -238,12 +238,30 @@ void VignetteEstimator::opt_vign() {
 }
 
 void VignetteEstimator::optimize() {
-  compute_error();
+  // compute_error();
   for (int i = 0; i < 10; i++) {
     opt_irradience();
-    compute_error();
+    // compute_error();
     opt_vign();
-    compute_error();
+    // compute_error();
+  }
+}
+
+void VignetteEstimator::cutoff() {
+  for (size_t j = 0; j < vio_dataset->get_num_cams(); j++) {
+    size_t num_knots = vign_param[j].getKnots().size();
+    double min_val = 1;
+    size_t argmin_val;
+    for (size_t i = 0; i < num_knots; i++) {
+      const auto &val = vign_param[j].getKnot(i)[0];
+      if (val < min_val && val > 0.1) {
+        min_val = val;
+        argmin_val = i;
+      }
+    }
+    for (size_t i = 0; i < num_knots; i++) {
+      if (i > argmin_val) vign_param[j].getKnot(i)[0] = 0.01;
+    }
   }
 }
 

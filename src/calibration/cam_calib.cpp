@@ -71,7 +71,8 @@ CamCalib::CamCalib(const std::string &dataset_path,
       huber_thresh("ui.huber_thresh", 4.0, 0.1, 10.0),
       opt_intr("ui.opt_intr", true, false, true),
       opt_until_convg("ui.opt_until_converge", false, false, true),
-      stop_thresh("ui.stop_thresh", 1e-8, 1e-10, 0.01, true) {
+      stop_thresh("ui.stop_thresh", 1e-8, 1e-10, 0.01, true),
+      vign_cutoff("ui.vign_cutoff", false, false, true) {
   if (show_gui) initGui();
 
   if (!fs::exists(cache_path)) {
@@ -153,6 +154,11 @@ void CamCalib::initGui() {
 }
 
 void CamCalib::computeVign() {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
+    std::cerr << "No intrinsics. Calibrate intrinsics first" << std::endl;
+    return;
+  }
+
   Eigen::aligned_vector<Eigen::Vector2d> optical_centers;
   for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
     optical_centers.emplace_back(
@@ -206,6 +212,7 @@ void CamCalib::computeVign() {
 
   ve.optimize();
   ve.compute_error(&reprojected_vignette_error);
+  if (vign_cutoff) ve.cutoff();
 
   std::vector<std::vector<float>> vign_data;
   ve.compute_data_log(vign_data);

@@ -157,9 +157,11 @@ class CamCalib {
   pangolin::Var<bool> opt_until_convg;
   pangolin::Var<double> stop_thresh;
 
-  std::shared_ptr<pangolin::Plotter> vign_plotter;
+  pangolin::Var<bool> vign_cutoff;
+
   std::shared_ptr<pangolin::Plotter> polar_plotter;
   std::shared_ptr<pangolin::Plotter> azimuth_plotter;
+  std::shared_ptr<pangolin::Plotter> vign_plotter;
 
   std::vector<pangolin::Colour> cam_colors;
 

@@ -64,6 +64,8 @@ class VignetteEstimator {
 
   void optimize();
 
+  void cutoff();
+
   void compute_data_log(std::vector<std::vector<float>> &vign_data_log);
 
   void save_vign_png(const std::string &path);
