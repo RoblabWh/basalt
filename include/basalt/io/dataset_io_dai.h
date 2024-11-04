@@ -4,6 +4,7 @@
 #include <basalt/io/dataset_io.h>
 #include <basalt/utils/filesystem.h>
 
+#include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
 
 namespace basalt {
@@ -76,6 +77,12 @@ class DaiVioDataset : public VioDataset {
 
         auto &resimg = res.emplace_back();
 
+        if (img.type() == CV_8UC3 || img.type() == CV_16UC3) {
+          cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
+        } else if (img.type() == CV_8UC4 || img.type() == CV_16UC4) {
+          cv::cvtColor(img, img, cv::COLOR_BGRA2GRAY);
+        }
+
         if (img.type() == CV_8UC1) {
           resimg.img.reset(new ManagedImage<uint16_t>(img.cols, img.rows));
 
@@ -85,18 +92,6 @@ class DaiVioDataset : public VioDataset {
           size_t full_size = img.cols * img.rows;
           for (size_t i = 0; i < full_size; i++) {
             int val = data_in[i];
-            val = val << 8;
-            data_out[i] = val;
-          }
-        } else if (img.type() == CV_8UC3) {
-          resimg.img.reset(new ManagedImage<uint16_t>(img.cols, img.rows));
-
-          const uint8_t *data_in = img.ptr();
-          uint16_t *data_out = resimg.img->ptr;
-
-          size_t full_size = img.cols * img.rows;
-          for (size_t i = 0; i < full_size; i++) {
-            int val = data_in[i * 3];
             val = val << 8;
             data_out[i] = val;
           }
