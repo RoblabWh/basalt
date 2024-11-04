@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
   std::string dataset_type;
   std::string aprilgrid_path;
   std::string result_path;
-  std::string cache_dataset_name = "calib-imu";
+  std::string cache_dataset_name;
 
   CLI::App app{"Calibrate IMU"};
 
@@ -27,6 +27,9 @@ int main(int argc, char **argv) {
   } catch (const CLI::ParseError &e) {
     return app.exit(e);
   }
+
+  if (cache_dataset_name.empty())
+    cache_dataset_name = dataset_path.substr(dataset_path.rfind('/') + 1);
 
   basalt::ImuCalib cv(dataset_path, dataset_type, result_path,
                       cache_dataset_name);

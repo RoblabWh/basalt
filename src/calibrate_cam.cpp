@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
   std::string aprilgrid_path;
   std::string result_path;
   std::vector<std::string> cam_types;
-  std::string cache_dataset_name = "calib-cam";
+  std::string cache_dataset_name;
   int skip_images = 1;
 
   CLI::App app{"Calibrate IMU"};
@@ -71,6 +71,9 @@ int main(int argc, char **argv) {
   } catch (const CLI::ParseError &e) {
     return app.exit(e);
   }
+
+  if (cache_dataset_name.empty())
+    cache_dataset_name = dataset_path.substr(dataset_path.rfind('/') + 1);
 
   basalt::CamCalib cv(dataset_path, dataset_type, aprilgrid_path, result_path,
                       cache_dataset_name, skip_images, cam_types);
