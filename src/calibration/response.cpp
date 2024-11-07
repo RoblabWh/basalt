@@ -70,66 +70,7 @@ inline Eigen::aligned_vector<T> eigen_aligned_vector_cwise_add(
   return c;
 }
 
-// void ResponseEstimator::opt_irradiance() {
-//   const auto tp1 = std::chrono::steady_clock::now();
-//   opt_irradiance_single();
-//   auto irra1 = irradiance;
-//   plotE(irradiance.front(), 1280, 800, "Esingel");
-//   const auto tp2 = std::chrono::steady_clock::now();
-//   opt_irradiance_tbb();
-//   auto irra2 = irradiance;
-//   plotE(irradiance.front(), 1280, 800, "Etbb");
-//   const auto tp3 = std::chrono::steady_clock::now();
-//   std::cout << "single: "
-//             << std::chrono::duration_cast<std::chrono::duration<double>>(tp2 -
-//                                                                          tp1)
-//                    .count()
-//             << "\ntbb:    "
-//             << std::chrono::duration_cast<std::chrono::duration<double>>(tp3 -
-//                                                                          tp2)
-//                    .count()
-//             << std::endl;
-//
-//   for (size_t i = 0; i < irra1.size(); ++i) {
-//     if (irra1[i].isApprox(irra2[i]))
-//       std::cout << "single and tbb is the same irradiance" << std::endl;
-//     else
-//       std::cout << "single and tbb is NOT the same irradiance" << std::endl;
-//   }
-// }
-// void ResponseEstimator::opt_irradiance_single() {
-//   Eigen::aligned_vector<Eigen::VectorXd> new_irradiance(irradiance.size());
-//   Eigen::aligned_vector<Eigen::VectorXd> new_irradiance_count(
-//       irradiance.size());
-//   for (size_t i = 0; i < irradiance.size(); ++i) {
-//     new_irradiance[i].setZero(irradiance[i].size());
-//     new_irradiance_count[i].setZero(irradiance[i].size());
-//   }
-//
-//   for (const auto timestamp : vio_dataset->get_image_timestamps()) {
-//     const auto data_vec = vio_dataset->get_image_data(timestamp);
-//     for (size_t cam_i = 0; cam_i < data_vec.size(); ++cam_i) {
-//       const auto data = data_vec[cam_i];
-//       for (size_t i = 0; i < data.img->size(); ++i) {
-//         if (!mask[cam_i][i]) continue;
-//         const auto p = (*data.img)[i] >> 8;
-//         if (p == 255) continue;
-//         new_irradiance[cam_i][i] += response[cam_i][p] * data.exposure;
-//         new_irradiance_count[cam_i][i] += data.exposure * data.exposure;
-//       }
-//     }
-//   }
-//
-//   for (size_t cam_i = 0; cam_i < irradiance.size(); ++cam_i) {
-//     for (Eigen::Index i = 0; i < irradiance[cam_i].size(); i++) {
-//       if (new_irradiance_count[cam_i][i] > 0)
-//         irradiance[cam_i][i] =
-//             new_irradiance[cam_i][i] / new_irradiance_count[cam_i][i];
-//     }
-//   }
-// }
-// void ResponseEstimator::opt_irradiance_tbb() {
-  void ResponseEstimator::opt_irradiance() {
+void ResponseEstimator::opt_irradiance() {
   Eigen::aligned_vector<Eigen::VectorXd> init_irradiance(irradiance.size());
   for (size_t i = 0; i < irradiance.size(); ++i)
     init_irradiance[i].setZero(irradiance[i].size());
@@ -176,63 +117,7 @@ inline Eigen::aligned_vector<T> eigen_aligned_vector_cwise_add(
   }
 }
 
-// void ResponseEstimator::opt_response() {
-//   const auto tp1 = std::chrono::steady_clock::now();
-//   opt_response_single();
-//   auto resp1 = response;
-//   const auto tp2 = std::chrono::steady_clock::now();
-//   opt_response_tbb();
-//   auto resp2 = response;
-//   const auto tp3 = std::chrono::steady_clock::now();
-//   std::cout << "single: "
-//             << std::chrono::duration_cast<std::chrono::duration<double>>(tp2 -
-//                                                                          tp1)
-//                    .count()
-//             << "\ntbb:    "
-//             << std::chrono::duration_cast<std::chrono::duration<double>>(tp3 -
-//                                                                          tp2)
-//                    .count()
-//             << std::endl;
-//
-//   for (size_t i = 0; i < resp1.size(); ++i) {
-//     if (resp1[i].isApprox(resp2[i]))
-//       std::cout << "single and tbb is the same response" << std::endl;
-//     else
-//       std::cout << "single and tbb is NOT the same response" << std::endl;
-//   }
-// }
-// void ResponseEstimator::opt_response_single() {
-//   Eigen::aligned_vector<Vec256d> new_response(response.size(),
-//                                                 Vec256d::Zero());
-//   Eigen::aligned_vector<Vec256d> new_response_count(response.size(),
-//                                                       Vec256d::Zero());
-//
-//   for (const auto timestamp : vio_dataset->get_image_timestamps()) {
-//     const auto data_vec = vio_dataset->get_image_data(timestamp);
-//     for (size_t cam_i = 0; cam_i < data_vec.size(); ++cam_i) {
-//       const auto data = data_vec[cam_i];
-//       for (size_t i = 0; i < data.img->size(); ++i) {
-//         if (!mask[cam_i][i]) continue;
-//         const auto p = (*data.img)[i] >> 8;
-//         if (p == 255) continue;
-//         new_response[cam_i][p] += irradiance[cam_i][i] * data.exposure;
-//         new_response_count[cam_i][p]++;
-//       }
-//     }
-//   }
-//
-//   for (size_t cam_i = 0; cam_i < response.size(); ++cam_i) {
-//     response[cam_i] =
-//         new_response[cam_i].cwiseQuotient(new_response_count[cam_i]);
-//     for (uint16_t i = 0; i < 256; ++i) {
-//       if (!std::isfinite(response[cam_i][i]) && i > 1)
-//         response[cam_i][i] = response[cam_i][i - 1] +
-//                              (response[cam_i][i - 1] - response[cam_i][i - 2]);
-//     }
-//   }
-// }
-// void ResponseEstimator::opt_response_tbb() {
-  void ResponseEstimator::opt_response() {
+void ResponseEstimator::opt_response() {
   tbb::combinable<Eigen::aligned_vector<Vec256d>> new_response_pool(
       Eigen::aligned_vector<Vec256d>(response.size(), Vec256d::Zero()));
   tbb::combinable<Eigen::aligned_vector<Vec256d>> new_response_count_pool(
@@ -263,8 +148,8 @@ inline Eigen::aligned_vector<T> eigen_aligned_vector_cwise_add(
 
   const auto new_response =
       new_response_pool.combine(eigen_aligned_vector_cwise_add<Vec256d>);
-  const auto new_response_count = new_response_count_pool.combine(
-      eigen_aligned_vector_cwise_add<Vec256d>);
+  const auto new_response_count =
+      new_response_count_pool.combine(eigen_aligned_vector_cwise_add<Vec256d>);
 
   for (size_t cam_i = 0; cam_i < response.size(); ++cam_i) {
     response[cam_i] =

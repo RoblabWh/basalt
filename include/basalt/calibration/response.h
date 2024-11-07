@@ -15,12 +15,8 @@ class ResponseEstimator {
   void compute_error();
 
   void opt_irradiance();
-  // void opt_irradiance_tbb();
-  // void opt_irradiance_single();
 
   void opt_response();
-  // void opt_response_tbb();
-  // void opt_response_single();
 
   void rescale();
 
