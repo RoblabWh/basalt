@@ -71,7 +71,7 @@ VignetteEstimator::VignetteEstimator(
     }
 
     while (vign_param[i].maxTimeNs() < int64_t(vign_size) * int64_t(1e9)) {
-      vign_param[i].knotsPushBack(Eigen::Matrix<double, 1, 1>(0.01));
+      vign_param[i].knotsPushBack(Eigen::Matrix<double, 1, 1>(knot_min));
     }
   }
 
@@ -260,7 +260,7 @@ void VignetteEstimator::cutoff() {
       }
     }
     for (size_t i = 0; i < num_knots; i++) {
-      if (i > argmin_val) vign_param[j].getKnot(i)[0] = 0.01;
+      if (i > argmin_val) vign_param[j].getKnot(i)[0] = knot_min;
     }
   }
 }

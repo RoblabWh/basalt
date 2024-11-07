@@ -286,6 +286,10 @@ class PosesOptimization {
     calib->vignette = vign;
   }
 
+  void setResponse(const Eigen::aligned_vector<Eigen::Vector<Scalar, 256>> &resp) {
+    calib->response = resp;
+  }
+
   void setResolution(const Eigen::aligned_vector<Eigen::Vector2i> &resolution) {
     calib->resolution = resolution;
   }

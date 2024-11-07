@@ -46,6 +46,7 @@ class VignetteEstimator {
   static const int SPLINE_N = 4;
   static const int64_t knot_spacing = 1e10;
   static const int border_size = 2;
+  constexpr static const double knot_min = 0.01;
 
   VignetteEstimator(
       const VioDatasetPtr &vio_dataset,

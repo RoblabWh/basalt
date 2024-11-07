@@ -31,9 +31,9 @@ void ImuCalib::initGui() {
   pangolin::CreateWindowAndBind("Main", 1600, 1000);
 
   pangolin::View &plot_raw_display = pangolin::CreateDisplay().SetBounds(
-      0.5, 1.0, pangolin::Attach::Pix(UI_WIDTH), 1.0);
+      0.51, 1.0, pangolin::Attach::Pix(UI_WIDTH), 1.0);
   pangolin::View &plot_calib_display = pangolin::CreateDisplay().SetBounds(
-      0.0, 0.5, pangolin::Attach::Pix(UI_WIDTH), 1.0);
+      0.0, 0.49, pangolin::Attach::Pix(UI_WIDTH), 1.0);
 
   pangolin::CreatePanel("ui").SetBounds(0.0, 1.0, 0.0,
                                         pangolin::Attach::Pix(UI_WIDTH));

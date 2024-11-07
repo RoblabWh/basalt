@@ -39,6 +39,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <basalt/calibration/vignette.h>
 
+#include <basalt/calibration/response.h>
+
 #include <basalt/optimization/poses_optimize.h>
 
 #include <basalt/serialization/headers_serialization.h>
@@ -102,26 +104,31 @@ void CamCalib::initGui() {
            .SetBounds(0.5, 1.0, pangolin::Attach::Pix(UI_WIDTH), 1.0)
            .SetLayout(pangolin::LayoutEqual);
 
-  pangolin::View &vign_plot_display =
-      pangolin::CreateDisplay().SetBounds(0.0, 0.5, 0.72, 1.0);
+  const float plot_spaceing = 0.0025;
 
-  vign_plotter.reset(new pangolin::Plotter(&vign_data_log, 0.0, 1000.0, 0.0,
-                                           1.0, 0.01f, 0.01f));
-  vign_plot_display.AddDisplay(*vign_plotter);
-
-  pangolin::View &polar_error_display = pangolin::CreateDisplay().SetBounds(
-      0.0, 0.5, pangolin::Attach::Pix(UI_WIDTH), 0.43);
+  pangolin::View &plot_display = pangolin::CreateDisplay().SetBounds(
+      0.0, 0.5, pangolin::Attach::Pix(UI_WIDTH), 1.0);
 
   polar_plotter.reset(
       new pangolin::Plotter(nullptr, 0.0, 120.0, 0.0, 1.0, 0.01f, 0.01f));
-  polar_error_display.AddDisplay(*polar_plotter);
-
-  pangolin::View &azimuthal_plot_display =
-      pangolin::CreateDisplay().SetBounds(0.0, 0.5, 0.45, 0.7);
+  polar_plotter->SetBounds(0.0, 1.0, 0.0, 0.25 - plot_spaceing);
+  plot_display.AddDisplay(*polar_plotter);
 
   azimuth_plotter.reset(
       new pangolin::Plotter(nullptr, -180.0, 180.0, 0.0, 1.0, 0.01f, 0.01f));
-  azimuthal_plot_display.AddDisplay(*azimuth_plotter);
+  azimuth_plotter->SetBounds(0.0, 1.0, 0.25 + plot_spaceing,
+                             0.5 - plot_spaceing);
+  plot_display.AddDisplay(*azimuth_plotter);
+
+  vign_plotter.reset(new pangolin::Plotter(&vign_data_log, 0.0, 1000.0, 0.0,
+                                           1.0, 0.01f, 0.01f));
+  vign_plotter->SetBounds(0.0, 1.0, 0.5 + plot_spaceing, 0.75 - plot_spaceing);
+  plot_display.AddDisplay(*vign_plotter);
+
+  resp_plotter.reset(new pangolin::Plotter(&resp_data_log, 0.0, 255.0, 0.0,
+                                           255.0, 0.1f, 0.1f));
+  resp_plotter->SetBounds(0.0, 1.0, 0.75 + plot_spaceing, 1.0);
+  plot_display.AddDisplay(*resp_plotter);
 
   pangolin::Var<std::function<void(void)>> load_dataset(
       "ui.load_dataset", std::bind(&CamCalib::loadDataset, this));
@@ -149,6 +156,9 @@ void CamCalib::initGui() {
 
   pangolin::Var<std::function<void(void)>> compute_vign(
       "ui.compute_vign", std::bind(&CamCalib::computeVign, this));
+
+  pangolin::Var<std::function<void(void)>> compute_resp(
+      "ui.compute_resp", std::bind(&CamCalib::computeResp, this));
 
   setNumCameras(1);
 }
@@ -238,6 +248,70 @@ void CamCalib::computeVign() {
   calib_opt->setVignette(ve.get_vign_param());
 
   std::cout << "Saved vignette png files to " << cache_path << std::endl;
+}
+
+void CamCalib::computeResp() {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
+    std::cerr << "No initial intrinsics. Press init_intrinsics initialize "
+                 "intrinsics"
+              << std::endl;
+    return;
+  }
+
+  Eigen::aligned_vector<Eigen::Vector2d> optical_centers;
+  for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
+    optical_centers.emplace_back(
+        calib_opt->calib->intrinsics[i].getParam().segment<2>(2));
+  }
+
+  std::vector<std::vector<bool>> mask(vio_dataset->get_num_cams());
+  for (size_t i = 0; i < mask.size(); ++i)
+    mask[i] = std::vector<bool>(
+        calib_opt->calib->resolution[i][0] * calib_opt->calib->resolution[i][1],
+        true);
+
+  if (calib_opt->calib->vignette.size() == mask.size()) {
+    std::cout << "Using vignette as mask" << std::endl;
+    for (size_t k = 0; k < mask.size(); ++k) {
+      const auto oc = optical_centers[k];
+      const auto w = calib_opt->calib->resolution[k][0];
+      const auto h = calib_opt->calib->resolution[k][1];
+
+      for (int32_t x = 0; x < w; x++) {
+        for (int32_t y = 0; y < h; y++) {
+          int64_t loc = (Eigen::Vector2d(x, y) - oc).norm() * 1e9;
+          double val = calib_opt->calib->vignette[k].evaluate(loc)[0];
+          if (val <
+              VignetteEstimator::knot_min + VignetteEstimator::knot_min / 10.0) //TODO maybe use * 10.0
+            mask[k][y * w + x] = false;
+        }
+      }
+    }
+  }
+
+  ResponseEstimator re(vio_dataset, calib_opt->calib->resolution, mask);
+
+  re.optimize();
+  re.compute_error();
+
+  std::vector<std::vector<float>> resp_data;
+  re.compute_data_log(resp_data);
+  resp_data_log.Clear();
+  for (const auto &v : resp_data) resp_data_log.Log(v);
+  {
+    resp_plotter->ClearSeries();
+    resp_plotter->ClearMarkers();
+
+    for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
+      resp_plotter->AddSeries("$i", "$" + std::to_string(i),
+                              pangolin::DrawingModeLine, cam_colors[i],
+                              "response camera " + std::to_string(i));
+    }
+  }
+
+  calib_opt->setResponse(re.get_response());
+
+  std::cout << "Done computing inverse response function" << std::endl;
 }
 
 void CamCalib::setNumCameras(size_t n) {

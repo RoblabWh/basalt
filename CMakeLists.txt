@@ -84,7 +84,7 @@ ENDIF()
 
 
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 17) # Needed at least for eigen overaling
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -306,6 +306,7 @@ target_sources(basalt
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/cam_calib.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/cam_imu_calib.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/imu_calib.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/response.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/vignette.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/device/rs_t265.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/hash_bow/hash_bow.h
@@ -365,6 +366,7 @@ target_sources(basalt
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/allan_variance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/aprilgrid.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/calibraiton_helper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/response.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/vignette.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/io/dataset_io.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/io/marg_data_io.cpp

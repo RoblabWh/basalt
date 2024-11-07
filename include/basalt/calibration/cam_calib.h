@@ -70,6 +70,8 @@ class CamCalib {
 
   void computeVign();
 
+  void computeResp();
+
   void setNumCameras(size_t n);
 
   void renderingLoop();
@@ -162,6 +164,7 @@ class CamCalib {
   std::shared_ptr<pangolin::Plotter> polar_plotter;
   std::shared_ptr<pangolin::Plotter> azimuth_plotter;
   std::shared_ptr<pangolin::Plotter> vign_plotter;
+  std::shared_ptr<pangolin::Plotter> resp_plotter;
 
   std::vector<pangolin::Colour> cam_colors;
 
@@ -169,7 +172,7 @@ class CamCalib {
 
   std::vector<std::shared_ptr<pangolin::ImageView>> img_view;
 
-  pangolin::DataLog vign_data_log;
+  pangolin::DataLog vign_data_log, resp_data_log;
 
   std::vector<std::shared_ptr<pangolin::DataLog>> polar_data_log,
       azimuth_data_log;
