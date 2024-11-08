@@ -34,6 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <basalt/io/dataset_io.h>
+#include <basalt/io/dataset_io_cv.h>
 #include <basalt/io/dataset_io_dai.h>
 #include <basalt/io/dataset_io_euroc.h>
 #include <basalt/io/dataset_io_kitti.h>
@@ -54,6 +55,8 @@ DatasetIoInterfacePtr DatasetIoFactory::getDatasetIo(
     return DatasetIoInterfacePtr(new UzhIO);
   } else if (dataset_type == "kitti") {
     return DatasetIoInterfacePtr(new KittiIO);
+  } else if (dataset_type == "cv") {
+    return DatasetIoInterfacePtr(new CvIO);
   } else {
     std::cerr << "Dataset type " << dataset_type << " is not supported"
               << std::endl;

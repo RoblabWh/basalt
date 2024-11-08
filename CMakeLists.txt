@@ -311,6 +311,7 @@ target_sources(basalt
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/device/rs_t265.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/hash_bow/hash_bow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_cv.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_dai.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_euroc.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_kitti.h
