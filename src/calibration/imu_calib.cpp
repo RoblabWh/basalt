@@ -139,11 +139,11 @@ void ImuCalib::compute() {
     std::cerr << "Initalize optimization first!" << std::endl;
     return;
   }
-  std::cout << "Started computing variations" << std::endl;
+  std::cout << "Started computing variances" << std::endl;
 
   avar_computor->compute();
 
-  std::cout << "Done computing variations" << std::endl;
+  std::cout << "Done computing variances" << std::endl;
   if (show_gui) {
     recomputeDataLog();
     drawPlots();
