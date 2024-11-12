@@ -11,15 +11,19 @@ class AllanVarianceComputor {
   using CalibrationPtr = Calibration<double>::Ptr;
 
   // Range we will sample from (0.1s to 1000s)
-  const uint32_t period_min = 1;
-  const uint32_t period_max = 10000;
-  const uint32_t period_num = period_max - period_min + 1;
+  static const uint32_t period_min = 1;
+  static const uint32_t period_max = 10000;
+  static const uint32_t period_num = period_max - period_min + 1;
 
   const VioDatasetPtr vio_dataset;
   CalibrationPtr calib;
 
   Mat6Xd allan_deviations;
 
+  /**
+   * Lines for each axis (x, y, z) as (slope, intercept) representing the white
+   * noise and random walk for gyroscope and accelerometer.
+   */
   Mat23d gyro_wn;
   Mat23d accel_wn;
   Mat23d gyro_rr;
@@ -29,24 +33,20 @@ class AllanVarianceComputor {
   AllanVarianceComputor(const VioDatasetPtr &vio_dataset,
                         CalibrationPtr &calib);
 
+  /**
+   * Compute white noise and random walk for each axis of gyroscope and
+   * accelerometer and write result to calibration.
+   */
   void compute();
+
+  /**
+   * Compute the log10-log10 plot data for pangolin viewer.
+   */
   std::vector<std::vector<float>> compute_data_log() const;
 
  private:
   void compute_deviations();
   void fit_lines();
 };
-
-template <class T>
-inline uint64_t calculateCaptureTimeNs(const Eigen::aligned_vector<T> &data) {
-  return data.back().timestamp_ns - data.front().timestamp_ns;
-}
-
-template <class T>
-inline double calculateRate(const Eigen::aligned_vector<T> &data) {
-  const uint64_t duration = calculateCaptureTimeNs(data);
-  const double dt = duration / (data.size() - 1.);
-  return 1e9 / dt;
-}
 
 }  // namespace basalt

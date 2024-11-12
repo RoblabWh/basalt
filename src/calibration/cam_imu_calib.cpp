@@ -41,8 +41,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <basalt/optimization/spline_optimize.h>
 
-#include <basalt/calibration/allan_variance.h>
-
 namespace basalt {
 
 CamImuCalib::CamImuCalib(const std::string &dataset_path,

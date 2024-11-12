@@ -117,6 +117,18 @@ class CalibHelper {
       const Sophus::SE3d& T_target_camera, double& error);
 };
 
+template <class T>
+inline uint64_t calculateCaptureTimeNs(const Eigen::aligned_vector<T> &data) {
+  return data.back().timestamp_ns - data.front().timestamp_ns;
+}
+
+template <class T>
+inline double calculateRate(const Eigen::aligned_vector<T> &data) {
+  const uint64_t duration = calculateCaptureTimeNs(data);
+  const double dt = duration / (data.size() - 1.);
+  return 1e9 / dt;
+}
+
 }  // namespace basalt
 
 namespace cereal {
