@@ -47,6 +47,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <basalt/utils/filesystem.h>
 
+#include <tbb/concurrent_map.h>
+#include <tbb/parallel_for.h>
+
 namespace basalt {
 
 CamCalib::CamCalib(const std::string &dataset_path,
@@ -175,46 +178,50 @@ void CamCalib::computeVign() {
         calib_opt->calib->intrinsics[i].getParam().segment<2>(2));
   }
 
-  std::map<TimeCamId, Eigen::aligned_vector<Eigen::Vector3d>>
+  tbb::concurrent_map<TimeCamId, Eigen::aligned_vector<Eigen::Vector3d>>
       reprojected_vignette2;
-  for (size_t i = 0; i < vio_dataset->get_image_timestamps().size(); i++) {
-    int64_t timestamp_ns = vio_dataset->get_image_timestamps()[i];
-    const std::vector<ImageData> img_vec =
-        vio_dataset->get_image_data(timestamp_ns);
+  tbb::parallel_for(
+      tbb::blocked_range(0ul, vio_dataset->get_image_timestamps().size()),
+      [&](const auto &r) {
+        for (auto i = r.begin(); i < r.end(); ++i) {
+          int64_t timestamp_ns = vio_dataset->get_image_timestamps()[i];
+          const std::vector<ImageData> img_vec =
+              vio_dataset->get_image_data(timestamp_ns);
 
-    for (size_t j = 0; j < calib_opt->calib->intrinsics.size(); j++) {
-      TimeCamId tcid(timestamp_ns, j);
+          for (size_t j = 0; j < calib_opt->calib->intrinsics.size(); j++) {
+            TimeCamId tcid(timestamp_ns, j);
 
-      auto it = reprojected_vignette.find(tcid);
+            auto it = reprojected_vignette.find(tcid);
 
-      if (it != reprojected_vignette.end() && img_vec[j].img.get()) {
-        Eigen::aligned_vector<Eigen::Vector3d> rv;
-        rv.resize(it->second.corners_proj.size());
+            if (it != reprojected_vignette.end() && img_vec[j].img.get()) {
+              Eigen::aligned_vector<Eigen::Vector3d> rv;
+              rv.resize(it->second.corners_proj.size());
 
-        for (size_t k = 0; k < it->second.corners_proj.size(); k++) {
-          Eigen::Vector2d pos = it->second.corners_proj[k];
+              for (size_t k = 0; k < it->second.corners_proj.size(); k++) {
+                Eigen::Vector2d pos = it->second.corners_proj[k];
 
-          rv[k].head<2>() = pos;
+                rv[k].head<2>() = pos;
 
-          if (img_vec[j].img->InBounds(pos[0], pos[1], 1) &&
-              it->second.corners_proj_success[k]) {
-            double val = img_vec[j].img->interp(pos);
-            val /= std::numeric_limits<uint16_t>::max();
+                if (img_vec[j].img->InBounds(pos[0], pos[1], 1) &&
+                    it->second.corners_proj_success[k]) {
+                  double val = img_vec[j].img->interp(pos);
+                  val /= std::numeric_limits<uint16_t>::max();
 
-            if (img_vec[j].exposure > 0) {
-              val *= 0.001 / img_vec[j].exposure;  // bring to common exposure
+                  if (img_vec[j].exposure > 0) {
+                    val *= 0.001 / img_vec[j].exposure;  // bring to common exposure
+                  }
+
+                  rv[k][2] = val;
+                } else {
+                  rv[k][2] = -1;
+                }
+              }
+
+              reprojected_vignette2.emplace(tcid, rv);
             }
-
-            rv[k][2] = val;
-          } else {
-            rv[k][2] = -1;
           }
         }
-
-        reprojected_vignette2.emplace(tcid, rv);
-      }
-    }
-  }
+      });
 
   VignetteEstimator ve(vio_dataset, optical_centers,
                        calib_opt->calib->resolution, reprojected_vignette2,
@@ -282,7 +289,7 @@ void CamCalib::computeResp() {
           int64_t loc = (Eigen::Vector2d(x, y) - oc).norm() * 1e9;
           double val = calib_opt->calib->vignette[k].evaluate(loc)[0];
           if (val <
-              VignetteEstimator::knot_min + VignetteEstimator::knot_min / 10.0) //TODO maybe use * 10.0
+              VignetteEstimator::knot_min + VignetteEstimator::knot_min * 0.1)
             mask[k][y * w + x] = false;
         }
       }

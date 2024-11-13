@@ -39,6 +39,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <basalt/spline/rd_spline.h>
 
+#include <tbb/concurrent_map.h>
+
 namespace basalt {
 
 class VignetteEstimator {
@@ -52,7 +54,7 @@ class VignetteEstimator {
       const VioDatasetPtr &vio_dataset,
       const Eigen::aligned_vector<Eigen::Vector2d> &optical_centers,
       const Eigen::aligned_vector<Eigen::Vector2i> &resolutions,
-      const std::map<TimeCamId, Eigen::aligned_vector<Eigen::Vector3d>>
+      const tbb::concurrent_map<TimeCamId, Eigen::aligned_vector<Eigen::Vector3d>>
           &reprojected_vignette,
       const AprilGrid &april_grid);
 
@@ -81,7 +83,7 @@ class VignetteEstimator {
   const VioDatasetPtr vio_dataset;
   Eigen::aligned_vector<Eigen::Vector2d> optical_centers;
   Eigen::aligned_vector<Eigen::Vector2i> resolutions;
-  std::map<TimeCamId, Eigen::aligned_vector<Eigen::Vector3d>>
+  tbb::concurrent_map<TimeCamId, Eigen::aligned_vector<Eigen::Vector3d>>
       reprojected_vignette;
   const AprilGrid &april_grid;
 
