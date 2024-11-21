@@ -24,6 +24,8 @@ class ResponseEstimator {
 
   void compute_data_log(std::vector<std::vector<float>> &resp_data_log);
 
+  void save_resp_txt(const std::string &path);
+
   inline const auto &get_response() { return response; }
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW

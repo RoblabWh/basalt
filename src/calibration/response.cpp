@@ -193,4 +193,12 @@ void ResponseEstimator::compute_data_log(
   }
 }
 
+void ResponseEstimator::save_resp_txt(const std::string &path) {
+  for (size_t k = 0; k < vio_dataset->get_num_cams(); k++) {
+    std::ofstream of(path + "/pcalib_" + std::to_string(k) + ".txt");
+    for (const auto r : response[k]) of << r << ' ';
+    of << std::endl;
+  }
+}
+
 }  // namespace basalt

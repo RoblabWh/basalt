@@ -324,7 +324,7 @@ void VignetteEstimator::save_vign_png(const std::string &path) {
     //                        path + "/vingette_" + std::to_string(k) + ".png");
 
     cv::Mat img(vign_img.h, vign_img.w, CV_16U, vign_img.ptr);
-    cv::imwrite(path + "/vingette_" + std::to_string(k) + ".png", img);
+    cv::imwrite(path + "/vignette_" + std::to_string(k) + ".png", img);
   }
 }
 }  // namespace basalt

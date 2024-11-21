@@ -316,6 +316,8 @@ void CamCalib::computeResp() {
     }
   }
 
+  re.save_resp_txt(cache_path);
+
   calib_opt->setResponse(re.get_response());
 
   std::cout << "Done computing inverse response function" << std::endl;
