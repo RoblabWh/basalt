@@ -130,15 +130,21 @@ class DaiIO : public DatasetIoInterface {
       return;
     }
 
+    std::vector<fs::path> metadata_paths;
     const auto cams_path = root / "cams";
     if (fs::is_directory(cams_path)) {
       for (const auto &entry : fs::directory_iterator(cams_path)) {
         const auto cam_path = cams_path / entry.path();
         if (cam_path.extension() == ".csv" &&
             fs::is_directory(cams_path / cam_path.stem())) {
-          read_camera_metadata(cam_path);
+          metadata_paths.push_back(cam_path);
         }
       }
+    }
+    // assure order to be lexicographic
+    std::sort(metadata_paths.begin(), metadata_paths.end());
+    for (const auto &metadata_path : metadata_paths) {
+      read_camera_metadata(metadata_path);
     }
 
     const auto imu_path = root / "imu.csv";
