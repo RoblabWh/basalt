@@ -6,8 +6,6 @@ namespace basalt {
 
 class ResponseEstimator {
  public:
-  using Vec256d = Eigen::Vector<double, 256>;
-
   ResponseEstimator(const VioDatasetPtr &vio_dataset,
                     const Eigen::aligned_vector<Eigen::Vector2i> &resolutions,
                     const std::vector<std::vector<bool>> &mask);
@@ -35,6 +33,6 @@ class ResponseEstimator {
   const std::vector<std::vector<bool>> mask;
 
   Eigen::aligned_vector<Eigen::VectorXd> irradiance;
-  Eigen::aligned_vector<Vec256d> response;
+  Eigen::aligned_vector<Eigen::VectorXd> response;
 };
 }  // namespace basalt

@@ -286,7 +286,7 @@ class PosesOptimization {
     calib->vignette = vign;
   }
 
-  void setResponse(const Eigen::aligned_vector<Eigen::Vector<Scalar, 256>> &resp) {
+  void setResponse(const Eigen::aligned_vector<Eigen::VectorX<Scalar>> &resp) {
     calib->response = resp;
   }
 

@@ -6,6 +6,8 @@
 
 namespace basalt {
 
+const uint8_t CDEPTH = 8;
+
 ResponseEstimator::ResponseEstimator(
     const VioDatasetPtr &vio_dataset,
     const Eigen::aligned_vector<Eigen::Vector2i> &resolutions,
@@ -16,7 +18,7 @@ ResponseEstimator::ResponseEstimator(
   irradiance.resize(num_cams);
   for (size_t i = 0; i < num_cams; ++i) {
     const auto resolution = resolutions[i];
-    response[i].setLinSpaced(0, response[i].size() - 1);
+    response[i].setLinSpaced(1u << CDEPTH, 0, 1u << CDEPTH - 1);
     irradiance[i].setOnes(resolution[0] * resolution[1]);
   }
 }
@@ -40,8 +42,8 @@ void ResponseEstimator::compute_error() {
             const auto data = data_vec[cam_i];
             for (size_t i = 0; i < data.img->size(); ++i) {
               if (!mask[cam_i][i]) continue;
-              const auto p = (*data.img)[i] >> 8;
-              if (p == 255) continue;
+              const auto p = (*data.img)[i] >> CDEPTH;
+              if (p == response.front().size() - 1) continue;
               long double residual =
                   response[cam_i][p] - data.exposure * irradiance[cam_i][i];
               if (!std::isfinite(residual)) continue;
@@ -92,8 +94,8 @@ void ResponseEstimator::opt_irradiance() {
             const auto data = data_vec[cam_i];
             for (size_t i = 0; i < data.img->size(); ++i) {
               if (!mask[cam_i][i]) continue;
-              const auto p = (*data.img)[i] >> 8;
-              if (p == 255) continue;
+              const auto p = (*data.img)[i] >> CDEPTH;
+              if (p == response.front().size() - 1) continue;
               new_irradiance_part[cam_i][i] +=
                   response[cam_i][p] * data.exposure;
               new_irradiance_count_part[cam_i][i] +=
@@ -118,10 +120,10 @@ void ResponseEstimator::opt_irradiance() {
 }
 
 void ResponseEstimator::opt_response() {
-  tbb::combinable<Eigen::aligned_vector<Vec256d>> new_response_pool(
-      Eigen::aligned_vector<Vec256d>(response.size(), Vec256d::Zero()));
-  tbb::combinable<Eigen::aligned_vector<Vec256d>> new_response_count_pool(
-      Eigen::aligned_vector<Vec256d>(response.size(), Vec256d::Zero()));
+  tbb::combinable<Eigen::aligned_vector<Eigen::VectorXd>> new_response_pool(
+      Eigen::aligned_vector<Eigen::VectorXd>(response.size(), Eigen::VectorXd::Zero(response.front().size())));
+  tbb::combinable<Eigen::aligned_vector<Eigen::VectorXd>> new_response_count_pool(
+      Eigen::aligned_vector<Eigen::VectorXd>(response.size(), Eigen::VectorXd::Zero(response.front().size())));
 
   const auto &timestamps = vio_dataset->get_image_timestamps();
 
@@ -136,8 +138,8 @@ void ResponseEstimator::opt_response() {
             const auto data = data_vec[cam_i];
             for (size_t i = 0; i < data.img->size(); ++i) {
               if (!mask[cam_i][i]) continue;
-              const auto p = (*data.img)[i] >> 8;
-              if (p == 255) continue;
+              const auto p = (*data.img)[i] >> CDEPTH;
+              if (p == response.front().size() - 1) continue;
               new_response_part[cam_i][p] +=
                   irradiance[cam_i][i] * data.exposure;
               new_response_count_part[cam_i][p]++;
@@ -147,14 +149,14 @@ void ResponseEstimator::opt_response() {
       });
 
   const auto new_response =
-      new_response_pool.combine(eigen_aligned_vector_cwise_add<Vec256d>);
+      new_response_pool.combine(eigen_aligned_vector_cwise_add<Eigen::VectorXd>);
   const auto new_response_count =
-      new_response_count_pool.combine(eigen_aligned_vector_cwise_add<Vec256d>);
+      new_response_count_pool.combine(eigen_aligned_vector_cwise_add<Eigen::VectorXd>);
 
   for (size_t cam_i = 0; cam_i < response.size(); ++cam_i) {
     response[cam_i] =
         new_response[cam_i].cwiseQuotient(new_response_count[cam_i]);
-    for (uint16_t i = 0; i < 256; ++i) {
+    for (uint32_t i = 0; i < response.front().size(); ++i) {
       if (!std::isfinite(response[cam_i][i]) && i > 1)
         response[cam_i][i] = response[cam_i][i - 1] +
                              (response[cam_i][i - 1] - response[cam_i][i - 2]);
@@ -164,7 +166,7 @@ void ResponseEstimator::opt_response() {
 
 void ResponseEstimator::rescale() {
   for (size_t i = 0; i < response.size(); ++i) {
-    double rescale_factor = 255.0 / response[i][255];
+    double rescale_factor = 255.0 / response[i][response.front().size() - 1];
     // std::cout << "rescale factor: " << rescale_factor << std::endl;
     irradiance[i] *= rescale_factor;
     response[i] *= rescale_factor;
