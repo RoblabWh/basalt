@@ -418,14 +418,8 @@ void CamImuCalib::initOptimization() {
     calib_opt->addGyroMeasurement(gd.timestamp_ns, gd.data);
   }
 
-  std::set<uint64_t> invalid_timestamps;
   for (const auto &kv : calib_corners) {
-    if (kv.second.corner_ids.size() < MIN_CORNERS)
-      invalid_timestamps.insert(kv.first.frame_id);
-  }
-
-  for (const auto &kv : calib_corners) {
-    if (invalid_timestamps.find(kv.first.frame_id) == invalid_timestamps.end())
+    if (kv.second.corner_ids.size() >= MIN_CORNERS)
       calib_opt->addAprilgridMeasurement(kv.first.frame_id, kv.first.cam_id,
                                          kv.second.corners,
                                          kv.second.corner_ids);
