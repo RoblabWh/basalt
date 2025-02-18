@@ -11,11 +11,19 @@ namespace basalt {
 ImuCalib::ImuCalib(const std::string &dataset_path,
                    const std::string &dataset_type,
                    const std::string &cache_path,
-                   const std::string &cache_dataset_name, bool show_gui)
+                   const std::string &cache_dataset_name, double wn_min,
+                   double wn_max, double rr_min, double rr_max,
+                   double period_min, double period_max, bool show_gui)
     : dataset_path(dataset_path),
       dataset_type(dataset_type),
       cache_path(ensure_trailing_slash(cache_path)),
       cache_dataset_name(cache_dataset_name),
+      wn_min(wn_min),
+      wn_max(wn_max),
+      rr_min(rr_min),
+      rr_max(rr_max),
+      period_min(period_min),
+      period_max(period_max),
       show_gui(show_gui),
       show_data("ui.show_data", false, false, true),
       show_accel("ui.show_accel", true, false, true),
@@ -100,7 +108,9 @@ void ImuCalib::initOptimization() {
     return;
   }
 
-  avar_computor = std::make_unique<AllanVarianceComputor>(vio_dataset, calib);
+  avar_computor = std::make_unique<AllanVarianceComputor>(
+      vio_dataset, calib, wn_min, wn_max, rr_min, rr_max, period_min,
+      period_max);
 
   double gyro_rate = calculateRate(vio_dataset->get_gyro_data());
   double accel_rate = calculateRate(vio_dataset->get_accel_data());

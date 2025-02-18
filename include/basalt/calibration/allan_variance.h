@@ -10,10 +10,10 @@ class AllanVarianceComputor {
   using Mat6Xd = Eigen::Matrix<double, 6, -1>;
   using CalibrationPtr = Calibration<double>::Ptr;
 
-  // Range we will sample from (0.1s to 1000s)
-  static const uint32_t period_min = 1;
-  static const uint32_t period_max = 10000;
-  static const uint32_t period_num = period_max - period_min + 1;
+  double period_min, period_max;
+  uint32_t period_num;
+  double wn_min, wn_max;
+  double rr_min, rr_max;
 
   const VioDatasetPtr vio_dataset;
   CalibrationPtr calib;
@@ -31,7 +31,10 @@ class AllanVarianceComputor {
 
  public:
   AllanVarianceComputor(const VioDatasetPtr &vio_dataset,
-                        CalibrationPtr &calib);
+                        CalibrationPtr &calib,
+                        double wn_min, double wn_max,
+                        double rr_min, double rr_max,
+                        double period_min = -1., double period_max = -1.);
 
   /**
    * Compute white noise and random walk for each axis of gyroscope and

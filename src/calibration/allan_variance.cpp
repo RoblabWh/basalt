@@ -7,9 +7,32 @@
 namespace basalt {
 
 AllanVarianceComputor::AllanVarianceComputor(const VioDatasetPtr &vio_dataset,
-                                             CalibrationPtr &calib)
-    : vio_dataset(vio_dataset), calib(calib) {
+                                             CalibrationPtr &calib,
+                                             double wn_min, double wn_max,
+                                             double rr_min, double rr_max,
+                                             double period_min,
+                                             double period_max)
+    : period_min(period_min),
+      period_max(period_max),
+      wn_min(wn_min),
+      wn_max(wn_max),
+      rr_min(rr_min),
+      rr_max(rr_max),
+      vio_dataset(vio_dataset),
+      calib(calib) {
   allan_deviations.setZero(6, period_num);
+  if (period_min < 0 || period_max < 0) {
+    period_min = wn_min < rr_min ? wn_min : rr_min;
+    period_max = wn_max > rr_max ? wn_max : rr_max;
+  }
+  period_num = period_max / period_min + .5;
+
+  assert(wn_min < wn_max);
+  assert(rr_min < rr_max);
+  assert(period_min <= wn_min);
+  assert(period_min <= rr_min);
+  assert(period_max >= wn_max);
+  assert(period_max >= rr_max);
 }
 
 inline double line_y(const Eigen::Vector2d &line, double x) {
@@ -35,8 +58,7 @@ void AllanVarianceComputor::compute_deviations() {
 
   tbb::parallel_for(tbb::blocked_range(0u, period_num), [&](const auto &r) {
     for (uint32_t period = r.begin(); period < r.end(); ++period) {
-      const double period_time =
-          (period + 1) * 0.1;  // Sampling periods from 0.1s to 1000s
+      const double period_time = (period + 1) * period_min;
       const size_t max_bin_size = period_time * calib->imu_update_rate + .5;
       const size_t averages_num = gyro_data.size() / max_bin_size;
       const size_t averages_num_m1 = averages_num - 1;
@@ -82,10 +104,15 @@ inline Eigen::Vector2d fit_line(const Eigen::VectorXd &x,
 }
 
 void AllanVarianceComputor::fit_lines() {
-  const uint32_t white_noise_break_point = 100;  // 10 secs in deciseconds
+  const uint32_t wn_start = wn_min / period_min - .5;
+  const uint32_t wn_end = wn_max / period_min + .5;
+  const uint32_t rr_start = rr_min / period_min - .5;
+  const uint32_t rr_end = rr_max / period_min + .5;
+  const uint32_t wn_size = wn_end - wn_start;
+  const uint32_t rr_size = rr_end - rr_start;
 
   auto period =
-      Eigen::VectorXd::LinSpaced(period_num, period_min, period_max) * .1;
+      Eigen::VectorXd::LinSpaced(period_num, 1, period_num) * period_min;
   auto gyro_x = allan_deviations.row(0);
   auto gyro_y = allan_deviations.row(1);
   auto gyro_z = allan_deviations.row(2);
@@ -93,27 +120,28 @@ void AllanVarianceComputor::fit_lines() {
   auto accel_y = allan_deviations.row(4);
   auto accel_z = allan_deviations.row(5);
 
-  auto period_head = period.head(white_noise_break_point);
+  auto wn_period = period.segment(wn_start, wn_size);
+  auto rr_period = period.segment(rr_start, rr_size);
 
-  gyro_wn.col(0) =
-      fit_line(period_head, gyro_x.head(white_noise_break_point), -0.5);
-  gyro_wn.col(1) =
-      fit_line(period_head, gyro_y.head(white_noise_break_point), -0.5);
-  gyro_wn.col(2) =
-      fit_line(period_head, gyro_z.head(white_noise_break_point), -0.5);
+  gyro_wn.col(0) = fit_line(wn_period, gyro_x.segment(wn_start, wn_size), -0.5);
+  gyro_wn.col(1) = fit_line(wn_period, gyro_y.segment(wn_start, wn_size), -0.5);
+  gyro_wn.col(2) = fit_line(wn_period, gyro_z.segment(wn_start, wn_size), -0.5);
   accel_wn.col(0) =
-      fit_line(period_head, accel_x.head(white_noise_break_point), -0.5);
+      fit_line(wn_period, accel_x.segment(wn_start, wn_size), -0.5);
   accel_wn.col(1) =
-      fit_line(period_head, accel_y.head(white_noise_break_point), -0.5);
+      fit_line(wn_period, accel_y.segment(wn_start, wn_size), -0.5);
   accel_wn.col(2) =
-      fit_line(period_head, accel_z.head(white_noise_break_point), -0.5);
+      fit_line(wn_period, accel_z.segment(wn_start, wn_size), -0.5);
 
-  gyro_rr.col(0) = fit_line(period, gyro_x, 0.5);
-  gyro_rr.col(1) = fit_line(period, gyro_y, 0.5);
-  gyro_rr.col(2) = fit_line(period, gyro_z, 0.5);
-  accel_rr.col(0) = fit_line(period, accel_x, 0.5);
-  accel_rr.col(1) = fit_line(period, accel_y, 0.5);
-  accel_rr.col(2) = fit_line(period, accel_z, 0.5);
+  gyro_rr.col(0) = fit_line(rr_period, gyro_x.segment(rr_start, rr_size), 0.5);
+  gyro_rr.col(1) = fit_line(rr_period, gyro_y.segment(rr_start, rr_size), 0.5);
+  gyro_rr.col(2) = fit_line(rr_period, gyro_z.segment(rr_start, rr_size), 0.5);
+  accel_rr.col(0) =
+      fit_line(rr_period, accel_x.segment(rr_start, rr_size), 0.5);
+  accel_rr.col(1) =
+      fit_line(rr_period, accel_y.segment(rr_start, rr_size), 0.5);
+  accel_rr.col(2) =
+      fit_line(rr_period, accel_z.segment(rr_start, rr_size), 0.5);
 }
 
 std::vector<std::vector<float>> AllanVarianceComputor::compute_data_log()
@@ -123,7 +151,7 @@ std::vector<std::vector<float>> AllanVarianceComputor::compute_data_log()
   for (uint32_t period = 0; period < period_num; ++period) {
     std::vector<float> vals;
     vals.reserve(19);
-    double period_time = (period + 1) * .1;
+    double period_time = (period + 1) * period_min;
     vals.push_back(std::log10(period_time));
     for (uint8_t k = 0; k < 6; ++k)
       vals.push_back(std::log10(allan_deviations.col(period)[k]));

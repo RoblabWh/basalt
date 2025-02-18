@@ -21,6 +21,9 @@ class ImuCalib {
  public:
   ImuCalib(const std::string &dataset_path, const std::string &dataset_type,
               const std::string &cache_path, const std::string &cache_dataset_name,
+              double wn_min, double wn_max,
+              double rr_min, double rr_max,
+              double period_min, double period_max,
               bool show_gui = true);
 
   ~ImuCalib();
@@ -54,6 +57,10 @@ class ImuCalib {
 
   std::string cache_path;
   std::string cache_dataset_name;
+
+  double wn_min, wn_max;
+  double rr_min, rr_max;
+  double period_min, period_max;
 
   bool show_gui;
 
