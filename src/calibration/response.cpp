@@ -18,7 +18,7 @@ ResponseEstimator::ResponseEstimator(
   irradiance.resize(num_cams);
   for (size_t i = 0; i < num_cams; ++i) {
     const auto resolution = resolutions[i];
-    response[i].setLinSpaced(1u << CDEPTH, 0, 1u << CDEPTH - 1);
+    response[i].setLinSpaced(1u << CDEPTH, 0, (1u << CDEPTH) - 1);
     irradiance[i].setOnes(resolution[0] * resolution[1]);
   }
 }

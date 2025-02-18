@@ -91,6 +91,7 @@ CamCalib::CamCalib(const std::string &dataset_path,
       vign_cutoff("ui.vign_cutoff", false, false, true),
       compute_vign("ui.compute_vign", std::bind(&CamCalib::computeVign, this)),
       save_calib("ui.save_calib", std::bind(&CamCalib::saveCalib, this)),
+      set_lin_resp("ui.set_lin_resp", std::bind(&CamCalib::setLinearResp, this)),
       compute_resp("ui.compute_resp", std::bind(&CamCalib::computeResp, this)) {
   if (show_gui) initGui();
 
@@ -305,6 +306,20 @@ void CamCalib::computeResp() {
   calib_opt->setResponse(re.get_response());
 
   std::cout << "Done computing inverse response function" << std::endl;
+}
+
+void CamCalib::setLinearResp() {
+  std::vector<std::vector<bool>> mask(vio_dataset->get_num_cams());
+  for (size_t i = 0; i < mask.size(); ++i)
+    mask[i] = std::vector<bool>(
+        calib_opt->calib->resolution[i][0] * calib_opt->calib->resolution[i][1],
+        true);
+
+  ResponseEstimator re(vio_dataset, calib_opt->calib->resolution, mask);
+
+  calib_opt->setResponse(re.get_response());
+
+  std::cout << "Set linear inverse response function" << std::endl;
 }
 
 void CamCalib::setNumCameras(size_t n) {

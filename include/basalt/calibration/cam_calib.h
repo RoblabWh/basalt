@@ -72,6 +72,8 @@ class CamCalib {
 
   void computeResp();
 
+  void setLinearResp();
+
   void setNumCameras(size_t n);
 
   void renderingLoop();
