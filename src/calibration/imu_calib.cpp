@@ -20,8 +20,12 @@ ImuCalib::ImuCalib(const std::string &dataset_path,
       show_data("ui.show_data", false, false, true),
       show_accel("ui.show_accel", true, false, true),
       show_gyro("ui.show_gyro", true, false, true),
+      load_dataset("ui.load_dataset", std::bind(&ImuCalib::loadDataset, this)),
       show_wn("ui.show_wn", true, false, true),
-      show_rr("ui.show_rr", true, false, true) {
+      show_rr("ui.show_rr", true, false, true),
+      init_opt("ui.init_opt", std::bind(&ImuCalib::initOptimization, this)),
+      comp("ui.compute", std::bind(&ImuCalib::compute, this)),
+      save_calib("ui.save_calib", std::bind(&ImuCalib::saveCalib, this)) {
   if (show_gui) initGui();
 }
 
@@ -44,19 +48,6 @@ void ImuCalib::initGui() {
   plotter_calib =
       new pangolin::Plotter(&imu_calib_log, -1.0, 3.0, -8.0, 0.0, 0.1, 0.1);
   plot_calib_display.AddDisplay(*plotter_calib);
-
-
-  pangolin::Var<std::function<void(void)>> load_dataset(
-      "ui.load_dataset", std::bind(&ImuCalib::loadDataset, this));
-
-  pangolin::Var<std::function<void(void)>> init_opt(
-      "ui.init_opt", std::bind(&ImuCalib::initOptimization, this));
-
-  pangolin::Var<std::function<void(void)>> compute(
-      "ui.compute", std::bind(&ImuCalib::compute, this));
-
-  pangolin::Var<std::function<void(void)>> save_calib(
-      "ui.save_calib", std::bind(&ImuCalib::saveCalib, this));
 }
 
 void ImuCalib::renderingLoop() {

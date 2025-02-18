@@ -139,37 +139,38 @@ class CamImuCalib {
   //////////////////////
 
   pangolin::Var<int> show_frame;
-
-  pangolin::Var<bool> show_corners;
-  pangolin::Var<bool> show_corners_rejected;
-  pangolin::Var<bool> show_init_reproj;
-  pangolin::Var<bool> show_opt;
   pangolin::Var<bool> show_ids;
-
+  pangolin::Var<bool> show_data;
   pangolin::Var<bool> show_accel;
   pangolin::Var<bool> show_gyro;
+  pangolin::Var<std::function<void(void)>> load_dataset;
+  pangolin::Var<bool> show_corners;
+  pangolin::Var<bool> show_corners_rejected;
+  pangolin::Var<std::function<void(void)>> detect_corners;
+  pangolin::Var<bool> show_init_reproj;
+  pangolin::Var<std::function<void(void)>> init_cam_poses;
+  pangolin::Var<std::function<void(void)>> init_cam_imu;
+  pangolin::Var<bool> show_opt;
+  pangolin::Var<bool> show_spline;
   pangolin::Var<bool> show_pos;
   pangolin::Var<bool> show_rot_error;
-
-  pangolin::Var<bool> show_mocap;
-  pangolin::Var<bool> show_mocap_rot_error;
-  pangolin::Var<bool> show_mocap_rot_vel;
-
-  pangolin::Var<bool> show_spline;
-  pangolin::Var<bool> show_data;
-
+  pangolin::Var<std::function<void(void)>> init_opt;
   pangolin::Var<bool> opt_intr;
   pangolin::Var<bool> opt_poses;
   pangolin::Var<bool> opt_corners;
   pangolin::Var<bool> opt_cam_time_offset;
   pangolin::Var<bool> opt_imu_scale;
-
-  pangolin::Var<bool> opt_mocap;
-
   pangolin::Var<double> huber_thresh;
-
-  pangolin::Var<bool> opt_until_convg;
   pangolin::Var<double> stop_thresh;
+  pangolin::Var<std::function<void(void)>> opt;
+  pangolin::Var<bool> opt_until_convg;
+  pangolin::Var<std::function<void(void)>> save_calib;
+  pangolin::Var<bool> show_mocap;
+  pangolin::Var<bool> show_mocap_rot_error;
+  pangolin::Var<bool> show_mocap_rot_vel;
+  pangolin::Var<bool> opt_mocap;
+  pangolin::Var<std::function<void(void)>> init_mocap;
+  pangolin::Var<std::function<void(void)>> save_mocap_calib;
 
   pangolin::Plotter *plotter;
   pangolin::View *img_view_display;

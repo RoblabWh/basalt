@@ -67,17 +67,31 @@ CamCalib::CamCalib(const std::string &dataset_path,
       cam_types(cam_types),
       show_gui(show_gui),
       show_frame("ui.show_frame", 0, 0, 1500),
+      show_ids("ui.show_ids", false, false, true),
+      load_dataset("ui.load_dataset", std::bind(&CamCalib::loadDataset, this)),
       show_corners("ui.show_corners", true, false, true),
       show_corners_rejected("ui.show_corners_rejected", false, false, true),
+      detect_corners("ui.detect_corners",
+                     std::bind(&CamCalib::detectCorners, this)),
+      init_cam_intrinsics("ui.init_cam_intr",
+                          std::bind(&CamCalib::initCamIntrinsics, this)),
       show_init_reproj("ui.show_init_reproj", false, false, true),
+      init_cam_poses("ui.init_cam_poses",
+                     std::bind(&CamCalib::initCamPoses, this)),
+      init_cam_extrinsics("ui.init_cam_extr",
+                          std::bind(&CamCalib::initCamExtrinsics, this)),
       show_opt("ui.show_opt", true, false, true),
       show_vign("ui.show_vign", false, false, true),
-      show_ids("ui.show_ids", false, false, true),
-      huber_thresh("ui.huber_thresh", 4.0, 0.1, 10.0),
+      init_opt("ui.init_opt", std::bind(&CamCalib::initOptimization, this)),
       opt_intr("ui.opt_intr", true, false, true),
-      opt_until_convg("ui.opt_until_converge", false, false, true),
+      huber_thresh("ui.huber_thresh", 4.0, 0.1, 10.0),
       stop_thresh("ui.stop_thresh", 1e-8, 1e-10, 0.01, true),
-      vign_cutoff("ui.vign_cutoff", false, false, true) {
+      opt("ui.optimize", std::bind(&CamCalib::optimize, this)),
+      opt_until_convg("ui.opt_until_converge", false, false, true),
+      vign_cutoff("ui.vign_cutoff", false, false, true),
+      compute_vign("ui.compute_vign", std::bind(&CamCalib::computeVign, this)),
+      save_calib("ui.save_calib", std::bind(&CamCalib::saveCalib, this)),
+      compute_resp("ui.compute_resp", std::bind(&CamCalib::computeResp, this)) {
   if (show_gui) initGui();
 
   if (!fs::exists(cache_path)) {
@@ -132,36 +146,6 @@ void CamCalib::initGui() {
                                            255.0, 0.1f, 0.1f));
   resp_plotter->SetBounds(0.0, 1.0, 0.75 + plot_spaceing, 1.0);
   plot_display.AddDisplay(*resp_plotter);
-
-  pangolin::Var<std::function<void(void)>> load_dataset(
-      "ui.load_dataset", std::bind(&CamCalib::loadDataset, this));
-
-  pangolin::Var<std::function<void(void)>> detect_corners(
-      "ui.detect_corners", std::bind(&CamCalib::detectCorners, this));
-
-  pangolin::Var<std::function<void(void)>> init_cam_intrinsics(
-      "ui.init_cam_intr", std::bind(&CamCalib::initCamIntrinsics, this));
-
-  pangolin::Var<std::function<void(void)>> init_cam_poses(
-      "ui.init_cam_poses", std::bind(&CamCalib::initCamPoses, this));
-
-  pangolin::Var<std::function<void(void)>> init_cam_extrinsics(
-      "ui.init_cam_extr", std::bind(&CamCalib::initCamExtrinsics, this));
-
-  pangolin::Var<std::function<void(void)>> init_opt(
-      "ui.init_opt", std::bind(&CamCalib::initOptimization, this));
-
-  pangolin::Var<std::function<void(void)>> optimize(
-      "ui.optimize", std::bind(&CamCalib::optimize, this));
-
-  pangolin::Var<std::function<void(void)>> save_calib(
-      "ui.save_calib", std::bind(&CamCalib::saveCalib, this));
-
-  pangolin::Var<std::function<void(void)>> compute_vign(
-      "ui.compute_vign", std::bind(&CamCalib::computeVign, this));
-
-  pangolin::Var<std::function<void(void)>> compute_resp(
-      "ui.compute_resp", std::bind(&CamCalib::computeResp, this));
 
   setNumCameras(1);
 }

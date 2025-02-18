@@ -142,24 +142,29 @@ class CamCalib {
   const size_t MIN_CORNERS = 15;
 
   //////////////////////
-
   pangolin::Var<int> show_frame;
-
+  pangolin::Var<bool> show_ids;
+  pangolin::Var<std::function<void(void)>> load_dataset;
   pangolin::Var<bool> show_corners;
   pangolin::Var<bool> show_corners_rejected;
+  pangolin::Var<std::function<void(void)>> detect_corners;
+  pangolin::Var<std::function<void(void)>> init_cam_intrinsics;
   pangolin::Var<bool> show_init_reproj;
+  pangolin::Var<std::function<void(void)>> init_cam_poses;
+  pangolin::Var<std::function<void(void)>> init_cam_extrinsics;
   pangolin::Var<bool> show_opt;
   pangolin::Var<bool> show_vign;
-  pangolin::Var<bool> show_ids;
-
-  pangolin::Var<double> huber_thresh;
-
+  pangolin::Var<std::function<void(void)>> init_opt;
   pangolin::Var<bool> opt_intr;
-
-  pangolin::Var<bool> opt_until_convg;
+  pangolin::Var<double> huber_thresh;
   pangolin::Var<double> stop_thresh;
-
+  pangolin::Var<std::function<void(void)>> opt;
+  pangolin::Var<bool> opt_until_convg;
   pangolin::Var<bool> vign_cutoff;
+  pangolin::Var<std::function<void(void)>> compute_vign;
+  pangolin::Var<std::function<void(void)>> save_calib;
+  pangolin::Var<std::function<void(void)>> set_lin_resp;
+  pangolin::Var<std::function<void(void)>> compute_resp;
 
   std::shared_ptr<pangolin::Plotter> polar_plotter;
   std::shared_ptr<pangolin::Plotter> azimuth_plotter;

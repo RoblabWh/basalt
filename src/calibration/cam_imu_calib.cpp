@@ -58,29 +58,46 @@ CamImuCalib::CamImuCalib(const std::string &dataset_path,
       show_gui(show_gui),
       imu_noise(imu_noise),
       show_frame("ui.show_frame", 0, 0, 1500),
-      show_corners("ui.show_corners", true, false, true),
-      show_corners_rejected("ui.show_corners_rejected", false, false, true),
-      show_init_reproj("ui.show_init_reproj", false, false, true),
-      show_opt("ui.show_opt", true, false, true),
       show_ids("ui.show_ids", false, false, true),
+      show_data("ui.show_data", true, false, true),
       show_accel("ui.show_accel", true, false, true),
       show_gyro("ui.show_gyro", false, false, true),
+      load_dataset(
+        "ui.load_dataset", std::bind(&CamImuCalib::loadDataset, this)),
+      show_corners("ui.show_corners", true, false, true),
+      show_corners_rejected("ui.show_corners_rejected", false, false, true),
+      detect_corners("ui.detect_corners", std::bind(&CamImuCalib::detectCorners, this)),
+      show_init_reproj("ui.show_init_reproj", false, false, true),
+      init_cam_poses(
+        "ui.init_cam_poses", std::bind(&CamImuCalib::initCamPoses, this)),
+        init_cam_imu(
+          "ui.init_cam_imu", std::bind(&CamImuCalib::initCamImuTransform, this)),
+      show_opt("ui.show_opt", true, false, true),
+      show_spline("ui.show_spline", true, false, true),
       show_pos("ui.show_pos", false, false, true),
       show_rot_error("ui.show_rot_error", false, false, true),
-      show_mocap("ui.show_mocap", false, false, true),
-      show_mocap_rot_error("ui.show_mocap_rot_error", false, false, true),
-      show_mocap_rot_vel("ui.show_mocap_rot_vel", false, false, true),
-      show_spline("ui.show_spline", true, false, true),
-      show_data("ui.show_data", true, false, true),
+      init_opt(
+        "ui.init_opt", std::bind(&CamImuCalib::initOptimization, this)),
       opt_intr("ui.opt_intr", false, false, true),
       opt_poses("ui.opt_poses", false, false, true),
       opt_corners("ui.opt_corners", true, false, true),
       opt_cam_time_offset("ui.opt_cam_time_offset", false, false, true),
       opt_imu_scale("ui.opt_imu_scale", false, false, true),
-      opt_mocap("ui.opt_mocap", false, false, true),
       huber_thresh("ui.huber_thresh", 4.0, 0.1, 10.0),
+      stop_thresh("ui.stop_thresh", 1e-8, 1e-10, 0.01, true),
+      opt(
+        "ui.optimize", std::bind(&CamImuCalib::optimize, this)),
       opt_until_convg("ui.opt_until_converge", false, false, true),
-      stop_thresh("ui.stop_thresh", 1e-8, 1e-10, 0.01, true) {
+      save_calib(
+        "ui.save_calib", std::bind(&CamImuCalib::saveCalib, this)),
+      show_mocap("ui.show_mocap", false, false, true),
+      show_mocap_rot_error("ui.show_mocap_rot_error", false, false, true),
+      show_mocap_rot_vel("ui.show_mocap_rot_vel", false, false, true),
+      opt_mocap("ui.opt_mocap", false, false, true),
+      init_mocap(
+        "ui.init_mocap", std::bind(&CamImuCalib::initMocap, this)),
+      save_mocap_calib(
+        "ui.save_mocap_calib", std::bind(&CamImuCalib::saveMocapCalib, this)) {
   if (show_gui) initGui();
 }
 
@@ -107,33 +124,6 @@ void CamImuCalib::initGui() {
   plotter = new pangolin::Plotter(&imu_data_log, 0.0, 100.0, -10.0, 10.0, 0.01f,
                                   0.01f);
   plot_display.AddDisplay(*plotter);
-
-  pangolin::Var<std::function<void(void)>> load_dataset(
-      "ui.load_dataset", std::bind(&CamImuCalib::loadDataset, this));
-
-  pangolin::Var<std::function<void(void)>> detect_corners(
-      "ui.detect_corners", std::bind(&CamImuCalib::detectCorners, this));
-
-  pangolin::Var<std::function<void(void)>> init_cam_poses(
-      "ui.init_cam_poses", std::bind(&CamImuCalib::initCamPoses, this));
-
-  pangolin::Var<std::function<void(void)>> init_cam_imu(
-      "ui.init_cam_imu", std::bind(&CamImuCalib::initCamImuTransform, this));
-
-  pangolin::Var<std::function<void(void)>> init_opt(
-      "ui.init_opt", std::bind(&CamImuCalib::initOptimization, this));
-
-  pangolin::Var<std::function<void(void)>> optimize(
-      "ui.optimize", std::bind(&CamImuCalib::optimize, this));
-
-  pangolin::Var<std::function<void(void)>> init_mocap(
-      "ui.init_mocap", std::bind(&CamImuCalib::initMocap, this));
-
-  pangolin::Var<std::function<void(void)>> save_calib(
-      "ui.save_calib", std::bind(&CamImuCalib::saveCalib, this));
-
-  pangolin::Var<std::function<void(void)>> save_mocap_calib(
-      "ui.save_mocap_calib", std::bind(&CamImuCalib::saveMocapCalib, this));
 
   setNumCameras(1);
 }

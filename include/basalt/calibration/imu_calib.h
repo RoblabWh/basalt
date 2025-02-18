@@ -62,8 +62,12 @@ class ImuCalib {
   pangolin::Var<bool> show_data;
   pangolin::Var<bool> show_accel;
   pangolin::Var<bool> show_gyro;
+  pangolin::Var<std::function<void(void)>> load_dataset;
   pangolin::Var<bool> show_wn;
   pangolin::Var<bool> show_rr;
+  pangolin::Var<std::function<void(void)>> init_opt;
+  pangolin::Var<std::function<void(void)>> comp;
+  pangolin::Var<std::function<void(void)>> save_calib;
 
   pangolin::Plotter *plotter_raw, *plotter_calib;
 
