@@ -8,6 +8,8 @@
 
 namespace basalt {
 
+const uint64_t LOG_DATAPOINTS = 10000;
+
 ImuCalib::ImuCalib(const std::string &dataset_path,
                    const std::string &dataset_type,
                    const std::string &cache_path,
@@ -21,7 +23,8 @@ ImuCalib::ImuCalib(const std::string &dataset_path,
       period_min(period_min),
       period_max(period_max),
       show_gui(show_gui),
-      show_data("ui.show_data", false, false, true),
+      show_data("ui.show_data", true, false, true),
+      center_data("ui.center_data", true, false, true),
       show_accel("ui.show_accel", true, false, true),
       show_gyro("ui.show_gyro", true, false, true),
       show_wn("ui.show_wn", true, false, true),
@@ -51,11 +54,11 @@ void ImuCalib::initGui() {
                                         pangolin::Attach::Pix(UI_WIDTH));
 
   plotter_raw = new pangolin::Plotter(&imu_raw_log, 0.0, 1000.0, -10.0, 10.0,
-                                      0.01f, 0.01f);
+                                      0.001f, 0.001f);
   plot_raw_display.AddDisplay(*plotter_raw);
   plotter_calib =
-      new pangolin::Plotter(&imu_calib_log, std::log10(period_min) - 0.5,
-                            std::log10(period_max) + 0.5, -8.0, 0.0, 0.1, 0.1);
+      new pangolin::Plotter(&imu_calib_log, std::log10(period_min) - 0.1,
+                            std::log10(period_max) + 0.1, -8.0, 0.0, 0.1, 0.1);
   plot_calib_display.AddDisplay(*plotter_calib);
 }
 
@@ -64,9 +67,9 @@ void ImuCalib::renderingLoop() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (vio_dataset) {
-      if (show_data.GuiChanged() || show_accel.GuiChanged() ||
-          show_gyro.GuiChanged() || show_wn.GuiChanged() ||
-          show_rr.GuiChanged()) {
+      if (show_data.GuiChanged() || center_data.GuiChanged() ||
+          show_accel.GuiChanged() || show_gyro.GuiChanged() ||
+          show_wn.GuiChanged() || show_rr.GuiChanged()) {
         drawPlots();
       }
     }
@@ -223,24 +226,89 @@ void ImuCalib::recomputeDataLog() {
   imu_raw_accel_min = std::numeric_limits<double>::max();
   imu_raw_accel_max = std::numeric_limits<double>::lowest();
 
+  const size_t step = gyro_data.size() / LOG_DATAPOINTS;
+  size_t next_step = step;
+  Eigen::Vector3d gyro_sum, accel_sum;
+  Eigen::Vector3d gyro_sum_step, accel_sum_step;
+  gyro_sum.setZero();
+  accel_sum.setZero();
+  gyro_sum_step.setZero();
+  accel_sum_step.setZero();
+
+  std::vector<std::vector<float>> vals_uncentered;
+
   for (size_t i = 0; i < gyro_data.size(); ++i) {
     const basalt::GyroData &gd = gyro_data[i];
     const basalt::AccelData &ad = accel_data[i];
 
-    imu_raw_gyro_min = std::min(imu_raw_gyro_min, gd.data.minCoeff());
-    imu_raw_gyro_max = std::max(imu_raw_gyro_max, gd.data.maxCoeff());
-    imu_raw_accel_min = std::min(imu_raw_accel_min, ad.data.minCoeff());
-    imu_raw_accel_max = std::max(imu_raw_accel_max, ad.data.maxCoeff());
+    if (i == next_step) {
+      const auto gyro_avg = gyro_sum_step / step;
+      const auto accel_avg = accel_sum_step / step;
 
-    std::vector<float> vals;
-    vals.reserve(7);
-    double t = ad.timestamp_ns * 1e-9 - min_time;
-    vals.push_back(t);
+      std::vector<float> vals;
+      vals.reserve(7);
+      double t = ad.timestamp_ns * 1e-9 - min_time;
+      vals.push_back(t);
 
-    for (int k = 0; k < 3; k++) vals.push_back(gd.data[k]);
-    for (int k = 0; k < 3; k++) vals.push_back(ad.data[k]);
+      for (int k = 0; k < 3; k++) vals.push_back(gyro_avg[k]);
+      for (int k = 0; k < 3; k++) vals.push_back(accel_avg[k]);
+      vals_uncentered.push_back(vals);
 
+      imu_raw_gyro_min = std::min(imu_raw_gyro_min, gyro_avg.minCoeff());
+      imu_raw_gyro_max = std::max(imu_raw_gyro_max, gyro_avg.maxCoeff());
+      imu_raw_accel_min = std::min(imu_raw_accel_min, accel_avg.minCoeff());
+      imu_raw_accel_max = std::max(imu_raw_accel_max, accel_avg.maxCoeff());
+
+      next_step += step;
+      gyro_sum += gyro_sum_step;
+      accel_sum += accel_sum_step;
+      gyro_sum_step.setZero();
+      accel_sum_step.setZero();
+    }
+
+    gyro_sum_step += gd.data;
+    accel_sum_step += ad.data;
+  }
+
+  imu_raw_gyro_centered_min = std::numeric_limits<float>::max();
+  imu_raw_gyro_centered_max = std::numeric_limits<float>::lowest();
+  imu_raw_accel_centered_min = std::numeric_limits<float>::max();
+  imu_raw_accel_centered_max = std::numeric_limits<float>::lowest();
+
+  const auto gyro_avg = gyro_sum / gyro_data.size();
+  const auto accel_avg = accel_sum / accel_data.size();
+  for (auto &vals : vals_uncentered) {
+    vals.push_back(vals[1] - gyro_avg[0]);
+    vals.push_back(vals[2] - gyro_avg[1]);
+    vals.push_back(vals[3] - gyro_avg[2]);
+    vals.push_back(vals[4] - accel_avg[0]);
+    vals.push_back(vals[5] - accel_avg[1]);
+    vals.push_back(vals[6] - accel_avg[2]);
     imu_raw_log.Log(vals);
+    imu_raw_gyro_centered_min =
+        std::min<double>(imu_raw_gyro_centered_min, vals[7]);
+    imu_raw_gyro_centered_min =
+        std::min<double>(imu_raw_gyro_centered_min, vals[8]);
+    imu_raw_gyro_centered_min =
+        std::min<double>(imu_raw_gyro_centered_min, vals[9]);
+    imu_raw_gyro_centered_max =
+        std::max<double>(imu_raw_gyro_centered_max, vals[7]);
+    imu_raw_gyro_centered_max =
+        std::max<double>(imu_raw_gyro_centered_max, vals[8]);
+    imu_raw_gyro_centered_max =
+        std::max<double>(imu_raw_gyro_centered_max, vals[9]);
+    imu_raw_accel_centered_min =
+        std::min<double>(imu_raw_accel_centered_min, vals[10]);
+    imu_raw_accel_centered_min =
+        std::min<double>(imu_raw_accel_centered_min, vals[11]);
+    imu_raw_accel_centered_min =
+        std::min<double>(imu_raw_accel_centered_min, vals[12]);
+    imu_raw_accel_centered_max =
+        std::max<double>(imu_raw_accel_centered_max, vals[10]);
+    imu_raw_accel_centered_max =
+        std::max<double>(imu_raw_accel_centered_max, vals[11]);
+    imu_raw_accel_centered_max =
+        std::max<double>(imu_raw_accel_centered_max, vals[12]);
   }
 
   imu_calib_gyro_min = std::numeric_limits<float>::max();
@@ -251,20 +319,43 @@ void ImuCalib::recomputeDataLog() {
   if (avar_computor) {
     const auto calib_data = avar_computor->compute_data_log();
 
+    const double step =
+        (std::log10(period_max) - std::log10(period_min)) / LOG_DATAPOINTS;
+    double next_step = std::log10(period_min);
+    size_t sum_count = 0;
+    std::vector<float> vals_sum(7, 0);
     for (const auto &vals : calib_data) {
-      imu_calib_log.Log(vals);
-      imu_calib_gyro_min = std::min(imu_calib_gyro_min, vals[1]);
-      imu_calib_gyro_min = std::min(imu_calib_gyro_min, vals[2]);
-      imu_calib_gyro_min = std::min(imu_calib_gyro_min, vals[3]);
-      imu_calib_gyro_max = std::max(imu_calib_gyro_max, vals[1]);
-      imu_calib_gyro_max = std::max(imu_calib_gyro_max, vals[2]);
-      imu_calib_gyro_max = std::max(imu_calib_gyro_max, vals[3]);
-      imu_calib_accel_min = std::min(imu_calib_accel_min, vals[4]);
-      imu_calib_accel_min = std::min(imu_calib_accel_min, vals[5]);
-      imu_calib_accel_min = std::min(imu_calib_accel_min, vals[6]);
-      imu_calib_accel_max = std::max(imu_calib_accel_max, vals[4]);
-      imu_calib_accel_max = std::max(imu_calib_accel_max, vals[5]);
-      imu_calib_accel_max = std::max(imu_calib_accel_max, vals[6]);
+      for (uint8_t i = 1; i < 7; i++) {
+        vals_sum[i] += vals[i];
+      }
+      ++sum_count;
+
+      if (vals[0] >= next_step) {
+        vals_sum[0] = vals[0];
+        for (uint8_t i = 1; i < 7; i++) {
+          vals_sum[i] /= sum_count;
+        }
+
+        imu_calib_log.Log(vals);
+        imu_calib_gyro_min = std::min(imu_calib_gyro_min, vals_sum[1]);
+        imu_calib_gyro_min = std::min(imu_calib_gyro_min, vals_sum[2]);
+        imu_calib_gyro_min = std::min(imu_calib_gyro_min, vals_sum[3]);
+        imu_calib_gyro_max = std::max(imu_calib_gyro_max, vals_sum[1]);
+        imu_calib_gyro_max = std::max(imu_calib_gyro_max, vals_sum[2]);
+        imu_calib_gyro_max = std::max(imu_calib_gyro_max, vals_sum[3]);
+        imu_calib_accel_min = std::min(imu_calib_accel_min, vals_sum[4]);
+        imu_calib_accel_min = std::min(imu_calib_accel_min, vals_sum[5]);
+        imu_calib_accel_min = std::min(imu_calib_accel_min, vals_sum[6]);
+        imu_calib_accel_max = std::max(imu_calib_accel_max, vals_sum[4]);
+        imu_calib_accel_max = std::max(imu_calib_accel_max, vals_sum[5]);
+        imu_calib_accel_max = std::max(imu_calib_accel_max, vals_sum[6]);
+
+        for (uint8_t i = 1; i < 7; i++) {
+          vals_sum[i] = 0;
+        }
+        sum_count = 0;
+        next_step += step;
+      }
     }
   }
 }
@@ -282,15 +373,27 @@ void ImuCalib::drawPlots() {
 
   if (show_gyro) {
     if (show_data) {
-      plotter_raw_min = std::min(plotter_raw_min, imu_raw_gyro_min);
-      plotter_raw_max = std::max(plotter_raw_max, imu_raw_gyro_max);
+      if (center_data) {
+        plotter_raw_min = std::min(plotter_raw_min, imu_raw_gyro_centered_min);
+        plotter_raw_max = std::max(plotter_raw_max, imu_raw_gyro_centered_max);
 
-      plotter_raw->AddSeries("$0", "$1", pangolin::DrawingModeLine,
-                             pangolin::Colour::Red(), "g x");
-      plotter_raw->AddSeries("$0", "$2", pangolin::DrawingModeLine,
-                             pangolin::Colour::Green(), "g y");
-      plotter_raw->AddSeries("$0", "$3", pangolin::DrawingModeLine,
-                             pangolin::Colour::Blue(), "g z");
+        plotter_raw->AddSeries("$0", "$7", pangolin::DrawingModeLine,
+                               pangolin::Colour::Red(), "g x");
+        plotter_raw->AddSeries("$0", "$8", pangolin::DrawingModeLine,
+                               pangolin::Colour::Green(), "g y");
+        plotter_raw->AddSeries("$0", "$9", pangolin::DrawingModeLine,
+                               pangolin::Colour::Blue(), "g z");
+      } else {
+        plotter_raw_min = std::min(plotter_raw_min, imu_raw_gyro_min);
+        plotter_raw_max = std::max(plotter_raw_max, imu_raw_gyro_max);
+
+        plotter_raw->AddSeries("$0", "$1", pangolin::DrawingModeLine,
+                               pangolin::Colour::Red(), "g x");
+        plotter_raw->AddSeries("$0", "$2", pangolin::DrawingModeLine,
+                               pangolin::Colour::Green(), "g y");
+        plotter_raw->AddSeries("$0", "$3", pangolin::DrawingModeLine,
+                               pangolin::Colour::Blue(), "g z");
+      }
     }
 
     plotter_calib_min = std::min(plotter_calib_min, imu_calib_gyro_min);
@@ -322,15 +425,27 @@ void ImuCalib::drawPlots() {
 
   if (show_accel) {
     if (show_data) {
-      plotter_raw_min = std::min(plotter_raw_min, imu_raw_accel_min);
-      plotter_raw_max = std::max(plotter_raw_max, imu_raw_accel_max);
+      if (center_data) {
+        plotter_raw_min = std::min(plotter_raw_min, imu_raw_accel_centered_min);
+        plotter_raw_max = std::max(plotter_raw_max, imu_raw_accel_centered_max);
 
-      plotter_raw->AddSeries("$0", "$4", pangolin::DrawingModeLine,
-                             pangolin::Colour::Red(), "a x");
-      plotter_raw->AddSeries("$0", "$5", pangolin::DrawingModeLine,
-                             pangolin::Colour::Green(), "a y");
-      plotter_raw->AddSeries("$0", "$6", pangolin::DrawingModeLine,
-                             pangolin::Colour::Blue(), "a z");
+        plotter_raw->AddSeries("$0", "$10", pangolin::DrawingModeLine,
+                               pangolin::Colour::Red(), "a x");
+        plotter_raw->AddSeries("$0", "$11", pangolin::DrawingModeLine,
+                               pangolin::Colour::Green(), "a y");
+        plotter_raw->AddSeries("$0", "$12", pangolin::DrawingModeLine,
+                               pangolin::Colour::Blue(), "a z");
+      } else {
+        plotter_raw_min = std::min(plotter_raw_min, imu_raw_accel_min);
+        plotter_raw_max = std::max(plotter_raw_max, imu_raw_accel_max);
+
+        plotter_raw->AddSeries("$0", "$4", pangolin::DrawingModeLine,
+                               pangolin::Colour::Red(), "a x");
+        plotter_raw->AddSeries("$0", "$5", pangolin::DrawingModeLine,
+                               pangolin::Colour::Green(), "a y");
+        plotter_raw->AddSeries("$0", "$6", pangolin::DrawingModeLine,
+                               pangolin::Colour::Blue(), "a z");
+      }
     }
 
     plotter_calib_min = std::min(plotter_calib_min, imu_calib_accel_min);
@@ -363,14 +478,16 @@ void ImuCalib::drawPlots() {
   if (show_gyro || show_accel) {
     if (show_data) {
       plotter_raw->SetView(pangolin::XYRangef(
-          0.0, imu_raw_time_max, plotter_raw_min, plotter_raw_max));
+          0.0, imu_raw_time_max,
+          plotter_raw_min - 0.05 * std::abs(plotter_raw_min),
+          plotter_raw_max + 0.05 * std::abs(plotter_raw_max)));
     }
 
     if (plotter_calib_min < std::numeric_limits<float>::max() &&
         plotter_calib_max > std::numeric_limits<float>::lowest()) {
       plotter_calib->SetView(pangolin::XYRangef(
-          std::log10(period_min) - 0.5, std::log10(period_max) + 0.5,
-          plotter_calib_min - 0.5, plotter_calib_max + 0.5));
+          std::log10(period_min) - 0.1, std::log10(period_max) + 0.1,
+          plotter_calib_min - 0.1, plotter_calib_max + 0.1));
 
       if (show_wn) {
         plotter_calib->AddMarker(pangolin::Marker::Direction::Vertical,

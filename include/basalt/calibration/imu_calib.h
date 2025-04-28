@@ -64,6 +64,7 @@ class ImuCalib {
   //////////////////////
 
   pangolin::Var<bool> show_data;
+  pangolin::Var<bool> center_data;
   pangolin::Var<bool> show_accel;
   pangolin::Var<bool> show_gyro;
   pangolin::Var<bool> show_wn;
@@ -81,6 +82,8 @@ class ImuCalib {
   double imu_raw_time_max;
   double imu_raw_gyro_min, imu_raw_gyro_max;
   double imu_raw_accel_min, imu_raw_accel_max;
+  double imu_raw_gyro_centered_min, imu_raw_gyro_centered_max;
+  double imu_raw_accel_centered_min, imu_raw_accel_centered_max;
   float imu_calib_gyro_min, imu_calib_gyro_max;
   float imu_calib_accel_min, imu_calib_accel_max;
 };
