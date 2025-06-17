@@ -40,6 +40,7 @@ void ResponseEstimator::compute_error() {
               vio_dataset->get_image_data(timestamps[stamp_i]);
           for (size_t cam_i = 0; cam_i < data_vec.size(); ++cam_i) {
             const auto data = data_vec[cam_i];
+            if (!data.img) continue;
             for (size_t i = 0; i < data.img->size(); ++i) {
               if (!mask[cam_i][i]) continue;
               const auto p = (*data.img)[i] >> CDEPTH;
@@ -92,6 +93,7 @@ void ResponseEstimator::opt_irradiance() {
               vio_dataset->get_image_data(timestamps[stamp_i]);
           for (size_t cam_i = 0; cam_i < data_vec.size(); ++cam_i) {
             const auto data = data_vec[cam_i];
+            if (!data.img) continue;
             for (size_t i = 0; i < data.img->size(); ++i) {
               if (!mask[cam_i][i]) continue;
               const auto p = (*data.img)[i] >> CDEPTH;
@@ -136,6 +138,7 @@ void ResponseEstimator::opt_response() {
               vio_dataset->get_image_data(timestamps[stamp_i]);
           for (size_t cam_i = 0; cam_i < data_vec.size(); ++cam_i) {
             const auto data = data_vec[cam_i];
+            if (!data.img) continue;
             for (size_t i = 0; i < data.img->size(); ++i) {
               if (!mask[cam_i][i]) continue;
               const auto p = (*data.img)[i] >> CDEPTH;
@@ -182,6 +185,7 @@ void ResponseEstimator::optimize() {
     // compute_error();
     rescale();
     // compute_error();
+    std::cout << "Iteration: " << i+1 << '/' << 10 << std::endl;
   }
 }
 

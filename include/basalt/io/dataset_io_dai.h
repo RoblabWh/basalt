@@ -11,13 +11,14 @@ namespace basalt {
 
 struct CameraMetadata {
   fs::path basepath;
-  std::vector<int64_t> timstamps;  // ns
+  std::vector<int64_t> timestamps;  // ns
   std::unordered_map<int64_t, fs::path> filenames;
   std::unordered_map<int64_t, double> exposures;  // ms
 };
 
 class DaiVioDataset : public VioDataset {
   std::vector<CameraMetadata> cam_meta;
+  std::vector<int64_t> image_timestamps;
 
   Eigen::aligned_vector<AccelData> accel_data;
   Eigen::aligned_vector<GyroData> gyro_data;
@@ -42,7 +43,7 @@ class DaiVioDataset : public VioDataset {
   size_t get_num_cams() const { return cam_meta.size(); }
 
   std::vector<int64_t> &get_image_timestamps() {
-    return cam_meta.front().timstamps;
+    return image_timestamps;
   }
 
   const Eigen::aligned_vector<AccelData> &get_accel_data() const {
@@ -65,47 +66,48 @@ class DaiVioDataset : public VioDataset {
     res.reserve(cam_meta.size());
 
     for (const auto &cam : cam_meta) {
-      const auto &fullpath = cam.basepath / cam.filenames.at(timestamp);
+      auto &resimg = res.emplace_back();
+      if (cam.filenames.count(timestamp)) {
+        const auto &fullpath = cam.basepath / cam.filenames.at(timestamp);
 
-      if (fs::exists(fullpath)) {
-        cv::Mat img = read_image(fullpath);
-        if (img.empty()) {
-          std::cerr << "Failed to read image \"" << fullpath << "\" skipping"
-                    << std::endl;
-          continue;
-        }
-
-        auto &resimg = res.emplace_back();
-
-        if (img.type() == CV_8UC3 || img.type() == CV_16UC3) {
-          cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
-        } else if (img.type() == CV_8UC4 || img.type() == CV_16UC4) {
-          cv::cvtColor(img, img, cv::COLOR_BGRA2GRAY);
-        }
-
-        if (img.type() == CV_8UC1) {
-          resimg.img.reset(new ManagedImage<uint16_t>(img.cols, img.rows));
-
-          const uint8_t *data_in = img.ptr();
-          uint16_t *data_out = resimg.img->ptr;
-
-          size_t full_size = img.cols * img.rows;
-          for (size_t i = 0; i < full_size; i++) {
-            int val = data_in[i];
-            val = val << 8;
-            data_out[i] = val;
+        if (fs::exists(fullpath)) {
+          cv::Mat img = read_image(fullpath);
+          if (img.empty()) {
+            std::cerr << "Failed to read image \"" << fullpath << "\" skipping"
+                      << std::endl;
+            continue;
           }
-        } else if (img.type() == CV_16UC1) {
-          resimg.img.reset(new ManagedImage<uint16_t>(img.cols, img.rows));
-          std::memcpy(resimg.img->ptr, img.ptr(),
-                      img.cols * img.rows * sizeof(uint16_t));
 
-        } else {
-          std::cerr << "img.fmt.bpp " << img.type() << std::endl;
-          std::abort();
+          if (img.type() == CV_8UC3 || img.type() == CV_16UC3) {
+            cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
+          } else if (img.type() == CV_8UC4 || img.type() == CV_16UC4) {
+            cv::cvtColor(img, img, cv::COLOR_BGRA2GRAY);
+          }
+
+          if (img.type() == CV_8UC1) {
+            resimg.img.reset(new ManagedImage<uint16_t>(img.cols, img.rows));
+
+            const uint8_t *data_in = img.ptr();
+            uint16_t *data_out = resimg.img->ptr;
+
+            size_t full_size = img.cols * img.rows;
+            for (size_t i = 0; i < full_size; i++) {
+              int val = data_in[i];
+              val = val << 8;
+              data_out[i] = val;
+            }
+          } else if (img.type() == CV_16UC1) {
+            resimg.img.reset(new ManagedImage<uint16_t>(img.cols, img.rows));
+            std::memcpy(resimg.img->ptr, img.ptr(),
+                        img.cols * img.rows * sizeof(uint16_t));
+
+          } else {
+            std::cerr << "img.fmt.bpp " << img.type() << std::endl;
+            std::abort();
+          }
+
+          resimg.exposure = cam.exposures.at(timestamp);
         }
-
-        resimg.exposure = cam.exposures.at(timestamp);
       }
     }
 
@@ -143,9 +145,12 @@ class DaiIO : public DatasetIoInterface {
     }
     // assure order to be lexicographic
     std::sort(metadata_paths.begin(), metadata_paths.end());
+    std::set<int64_t> timestamps;
     for (const auto &metadata_path : metadata_paths) {
-      read_camera_metadata(metadata_path);
+      read_camera_metadata(metadata_path, timestamps);
     }
+    data->image_timestamps =
+        std::vector<int64_t>(timestamps.begin(), timestamps.end());
 
     const auto imu_path = root / "imu.csv";
     if (fs::is_regular_file(imu_path)) read_imu_data(imu_path);
@@ -164,7 +169,8 @@ class DaiIO : public DatasetIoInterface {
   VioDatasetPtr get_data() { return data; }
 
  private:
-  void read_camera_metadata(const fs::path &path) {
+  void read_camera_metadata(const fs::path &path,
+                            std::set<int64_t> &timestamps) {
     std::ifstream f(path);
     auto &cam_meta = data->cam_meta.emplace_back();
     cam_meta.basepath = path.parent_path() / path.stem();
@@ -181,7 +187,8 @@ class DaiIO : public DatasetIoInterface {
 
       ss >> timestamp >> tmp >> exposure >> tmp >> filename;
 
-      cam_meta.timstamps.push_back(timestamp);
+      timestamps.insert(timestamp);
+      cam_meta.timestamps.push_back(timestamp);
       cam_meta.exposures.insert({timestamp, exposure * 1e-6});
       cam_meta.filenames.insert({timestamp, filename});
     }

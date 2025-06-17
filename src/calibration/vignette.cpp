@@ -244,6 +244,7 @@ void VignetteEstimator::optimize() {
     // compute_error();
     opt_vign();
     // compute_error();
+    std::cout << "Iteration: " << i+1 << '/' << 10 << std::endl;
   }
 }
 
