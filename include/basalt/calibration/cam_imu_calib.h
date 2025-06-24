@@ -178,6 +178,7 @@ class CamImuCalib {
   std::vector<std::shared_ptr<pangolin::ImageView>> img_view;
 
   pangolin::DataLog imu_data_log, pose_data_log, mocap_data_log, vign_data_log;
+  double max_time;
 };
 
 }  // namespace basalt

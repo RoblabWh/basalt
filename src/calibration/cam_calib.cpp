@@ -231,8 +231,7 @@ void CamCalib::computeVign() {
                               "vignette camera " + std::to_string(i));
     }
 
-    vign_plotter->ScaleViewSmooth(vign_data_log.Samples() / 1000.0f, 1.0f, 0.0f,
-                                  0.5f);
+    vign_plotter->SetView(pangolin::XYRangef(0.0f, static_cast<float>(vign_data_log.Samples()), 0.0f, 1.0f));
   }
 
   ve.save_vign_png(cache_path);

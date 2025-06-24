@@ -121,7 +121,7 @@ void CamImuCalib::initGui() {
   pangolin::CreatePanel("ui").SetBounds(0.0, 1.0, 0.0,
                                         pangolin::Attach::Pix(UI_WIDTH));
 
-  plotter = new pangolin::Plotter(&imu_data_log, 0.0, 100.0, -10.0, 10.0, 0.01f,
+  plotter = new pangolin::Plotter(&imu_data_log, 0.0, 100.0, -1.0, 1.0, 0.01f,
                                   0.01f);
   plot_display.AddDisplay(*plotter);
 
@@ -910,7 +910,8 @@ void CamImuCalib::recomputeDataLog() {
 
   if (!vio_dataset || vio_dataset->get_accel_data().empty()) return;
 
-  double min_time = vio_dataset->get_accel_data()[0].timestamp_ns * 1e-9;
+  double min_time = vio_dataset->get_accel_data().front().timestamp_ns * 1e-9;
+  max_time = vio_dataset->get_accel_data().back().timestamp_ns * 1e-9 - min_time;
 
   for (size_t i = 0; i < vio_dataset->get_accel_data().size(); i++) {
     const basalt::AccelData &ad = vio_dataset->get_accel_data()[i];
@@ -1022,6 +1023,8 @@ void CamImuCalib::drawPlots() {
   plotter->ClearSeries();
   plotter->ClearMarkers();
 
+  float plotter_min = -1.0f, plotter_max = 1.0f;
+
   if (show_accel) {
     if (show_data) {
       plotter->AddSeries("$0", "$1", pangolin::DrawingModeDashed,
@@ -1040,6 +1043,9 @@ void CamImuCalib::drawPlots() {
       plotter->AddSeries("$0", "$6", pangolin::DrawingModeLine,
                          pangolin::Colour::Blue(), "a z Spline");
     }
+
+    plotter_min = std::min(plotter_min, -15.0f);
+    plotter_max = std::max(plotter_max, 15.0f);
   }
 
   if (show_gyro) {
@@ -1060,6 +1066,9 @@ void CamImuCalib::drawPlots() {
       plotter->AddSeries("$0", "$12", pangolin::DrawingModeLine,
                          pangolin::Colour::Blue(), "g z Spline");
     }
+
+    plotter_min = std::min(plotter_min, -5.0f);
+    plotter_max = std::max(plotter_max, 5.0f);
   }
 
   if (show_pos) {
@@ -1082,6 +1091,9 @@ void CamImuCalib::drawPlots() {
                          pangolin::Colour::Blue(), "p z Spline",
                          &pose_data_log);
     }
+
+    plotter_min = std::min(plotter_min, -2.0f);
+    plotter_max = std::max(plotter_max, 2.0f);
   }
 
   if (show_rot_error) {
@@ -1125,6 +1137,8 @@ void CamImuCalib::drawPlots() {
     plotter->AddSeries("$0", "$10", pangolin::DrawingModeLine,
                        pangolin::Colour(0, 1, 1), "rot vel z", &mocap_data_log);
   }
+
+  plotter->SetView(pangolin::XYRangef(0.0f, max_time, plotter_min, plotter_max));
 
   size_t frame_id = show_frame;
   double min_time = vio_dataset->get_accel_data().empty()
