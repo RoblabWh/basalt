@@ -5,6 +5,21 @@
 		"dockerfile": "Containerfile"
 	},
 	"runArgs": [
-		"-e", "DISPLAY", "-e", "QT_X11_NO_MITSHM=1", "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
-	]
+		// X11
+		"--env=DISPLAY",
+		"--env=QT_X11_NO_MITSHM=1",
+		"--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw"
+		// Data
+		//TODO: Mount volumes to access datasets
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				// C/C++
+				"ms-vscode.cpptools-extension-pack",
+				// Python
+				"ms-python.python"
+			]
+		}
+	}
 }

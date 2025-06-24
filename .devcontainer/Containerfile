@@ -13,3 +13,6 @@ RUN apt-get update && \
         libbz2-dev liblz4-dev \
         && \
     apt-get clean all
+
+RUN useradd -m -s /bin/bash user && \
+    chown -R user:user /home/user
