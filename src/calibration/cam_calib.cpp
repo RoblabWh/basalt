@@ -316,6 +316,23 @@ void CamCalib::setLinearResp() {
 
   ResponseEstimator re(vio_dataset, calib_opt->calib->resolution, mask);
 
+  std::vector<std::vector<float>> resp_data;
+  re.compute_data_log(resp_data);
+  resp_data_log.Clear();
+  for (const auto &v : resp_data) resp_data_log.Log(v);
+  {
+    resp_plotter->ClearSeries();
+    resp_plotter->ClearMarkers();
+
+    for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
+      resp_plotter->AddSeries("$i", "$" + std::to_string(i),
+                              pangolin::DrawingModeLine, cam_colors[i],
+                              "response camera " + std::to_string(i));
+    }
+  }
+
+  re.save_resp_txt(cache_path);
+
   calib_opt->setResponse(re.get_response());
 
   std::cout << "Set linear inverse response function" << std::endl;
