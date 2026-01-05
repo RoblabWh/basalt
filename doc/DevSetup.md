@@ -1,4 +1,14 @@
+## Visual Studio Code (Dev Container)
 
+1. Install [VSCode](https://code.visualstudio.com/)
+2. Install the VSCode [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
+3. Open the Basalt folder: File -> Open Folder...
+4. Edit `.devcontainer/devcontainer.json` to mount a data directory as a volume
+5. Reopen in Container: Ctrl+Shift+P -> Reopen in Container
+6. Configure Project: Ctrl+Shift+P -> CMake Configure
+7. Build Project: Ctrl+Shift+P -> CMake Build
+
+## QtCreator (Native)
 
 ### Clang-format
 We use clang-format to maintain a consistent formating of the code. Since there are small differences between different version of clang-format we use version 11 on all platforms.

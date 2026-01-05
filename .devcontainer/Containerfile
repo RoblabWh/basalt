@@ -11,8 +11,8 @@ RUN apt-get update && \
         libglew-dev \
         # Rosbag
         libbz2-dev liblz4-dev \
-        && \
-    apt-get clean all
+        # Development
+        clang-format
 
-RUN useradd -m -s /bin/bash user && \
-    chown -R user:user /home/user
+RUN useradd -m -s /bin/bash basalt && \
+    chown -R basalt:basalt /home/basalt

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 ##
 ## BSD 3-Clause License
 ##
@@ -9,5 +9,17 @@
 ## All rights reserved.
 ##
 
-sudo apt-get update
-sudo apt-get install -y gcc g++ cmake git libtbb-dev libeigen3-dev libglew-dev ccache libjpeg-dev libpng-dev liblz4-dev libbz2-dev libboost-regex-dev libboost-filesystem-dev libboost-date-time-dev libboost-program-options-dev libgtest-dev libopencv-dev libfmt-dev
+deps=(
+  # Build
+  cmake ninja-build g++ git
+  # Basalt
+  libtbb-dev libeigen3-dev libopencv-dev libfmt-dev
+  libboost-serialization-dev libboost-date-time-dev libboost-filesystem-dev libboost-program-options-dev libboost-regex-dev
+  # Pangolin
+  libglew-dev
+  # Rosbag
+  libbz2-dev liblz4-dev
+)
+
+apt-get update
+apt-get install --no-install-recommends -y "${deps[@]}"

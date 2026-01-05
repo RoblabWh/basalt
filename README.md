@@ -1,6 +1,6 @@
-[![pipeline status](https://gitlab.com/VladyslavUsenko/basalt/badges/master/pipeline.svg)](https://gitlab.com/VladyslavUsenko/basalt/commits/master)
-
 ## Basalt
+Fork of https://gitlab.com/VladyslavUsenko/basalt.git
+
 For more information see https://vision.in.tum.de/research/vslam/basalt
 
 ![teaser](doc/img/teaser.png)
@@ -10,9 +10,7 @@ This project contains tools for:
 * Visual-inertial odometry and mapping.
 * Simulated environment to test different components of the system.
 
-Some reusable components of the system are available as a separate [header-only library](https://gitlab.com/VladyslavUsenko/basalt-headers) ([Documentation](https://vladyslavusenko.gitlab.io/basalt-headers/)).
-
-There is also a [Github mirror](https://github.com/VladyslavUsenko/basalt-mirror) of this project to enable easy forking.
+Some reusable components of the system are available as a separate [header-only library](https://github.com/RoblabWh/basalt-headers) (Fork of https://gitlab.com/VladyslavUsenko/basalt-headers).
 
 ## Related Publications
 Visual-Inertial Odometry and Mapping:
@@ -32,26 +30,27 @@ Optimization (describes square-root optimization and marginalization used in VIO
 
 
 ## Installation
-### APT installation for Ubuntu 22.04, 20.04 and 18.04 (Fast)
-Set up keys, add the repository to the sources list, update the Ubuntu package index and install Basalt:
+Clone the project's source code:
 ```
-sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0AD9A3000D97B6C9
-sudo sh -c 'echo "deb [arch=amd64] http://packages.usenko.net/ubuntu $(lsb_release -sc) $(lsb_release -sc)/main" > /etc/apt/sources.list.d/basalt.list'
-sudo apt-get update
-sudo apt-get dist-upgrade
-sudo apt-get install basalt
+git clone --recursive https://github.com/RoblabWh/basalt
+cd basalt
 ```
 
-### Source installation for Ubuntu >= 18.04 and MacOS >= 10.14 Mojave
-Clone the source code for the project and build it. For MacOS you should have [Homebrew](https://brew.sh/) installed.
+### Docker Container
+Build the Docker image and run a container:
 ```
-git clone --recursive https://gitlab.com/VladyslavUsenko/basalt.git
-cd basalt
+docker build -t basalt .
+xhost +local:
+docker run -it --rm --env=DISPLAY --env=QT_X11_NO_MITSHM=1 --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume="$HOME":/home/basalt basalt
+```
+
+### Source installation for Ubuntu 18.04, 20.04, 22.04 and macOS >= 10.14 (Mojave)
+Build and install the project. For macOS, you should have [Homebrew](https://brew.sh/) installed.
+```
 ./scripts/install_deps.sh
-mkdir build
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
-make -j8
+cmake -B build -G Ninja -D CMAKE_BUILD_TYPE=Release
+cmake --build build --parallel $(nproc)
+sudo cmake --install build
 ```
 
 ## Usage
