@@ -4,6 +4,8 @@
 
 #include <basalt/serialization/headers_serialization.h>
 
+#include <basalt/utils/filesystem.h>
+
 #include <basalt/calibration/allan_variance.h>
 
 namespace basalt {
@@ -38,6 +40,10 @@ ImuCalib::ImuCalib(const std::string &dataset_path,
       fit("ui.fit_lines", std::bind(&ImuCalib::fitLines, this)),
       save_calib("ui.save_calib", std::bind(&ImuCalib::saveCalib, this)) {
   if (show_gui) initGui();
+
+  if (!fs::exists(cache_path)) {
+    fs::create_directory(cache_path);
+  }
 }
 
 ImuCalib::~ImuCalib() {}
