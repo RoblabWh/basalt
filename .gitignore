@@ -1,5 +1,7 @@
 cmake-build*
 .idea
+.vscode
+.cache
 CMakeLists.txt.user
 build*
 scripts/eval/eval_*
