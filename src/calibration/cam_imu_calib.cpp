@@ -47,14 +47,17 @@ CamImuCalib::CamImuCalib(const std::string &dataset_path,
                          const std::string &dataset_type,
                          const std::string &aprilgrid_path,
                          const std::string &cache_path,
-                         const std::string &cache_dataset_name, int skip_images,
-                         const std::vector<double> &imu_noise, bool show_gui)
+                         const std::string &cache_dataset_name,
+                         const std::vector<double> &imu_noise, int skip_images,
+                         int start_image, int end_image, bool show_gui)
     : dataset_path(dataset_path),
       dataset_type(dataset_type),
       april_grid(aprilgrid_path),
       cache_path(ensure_trailing_slash(cache_path)),
       cache_dataset_name(cache_dataset_name),
       skip_images(skip_images),
+      start_image(start_image),
+      end_image(end_image),
       show_gui(show_gui),
       imu_noise(imu_noise),
       show_frame("ui.show_frame", 0, 0, 1500),
@@ -581,13 +584,17 @@ void CamImuCalib::loadDataset() {
   vio_dataset = dataset_io->get_data();
   setNumCameras(vio_dataset->get_num_cams());
 
-  if (skip_images > 1) {
+  if (skip_images > 1 || start_image > 0 || end_image != 0) {
     std::vector<int64_t> new_image_timestamps;
-    for (size_t i = 0; i < vio_dataset->get_image_timestamps().size(); i++) {
-      if (i % skip_images == 0)
+    for (size_t i = start_image;
+         i < (end_image > 0
+                  ? end_image
+                  : vio_dataset->get_image_timestamps().size() + end_image);
+         ++i) {
+      if (i % skip_images == 0) {
         new_image_timestamps.push_back(vio_dataset->get_image_timestamps()[i]);
+      }
     }
-
     vio_dataset->get_image_timestamps() = new_image_timestamps;
   }
 

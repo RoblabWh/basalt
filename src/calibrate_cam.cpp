@@ -45,6 +45,8 @@ int main(int argc, char **argv) {
   std::vector<std::string> cam_types;
   std::string cache_dataset_name;
   int skip_images = 1;
+  int start_image = 0;
+  int end_image = 0;
 
   CLI::App app{"Calibrate IMU"};
 
@@ -61,10 +63,13 @@ int main(int argc, char **argv) {
   app.add_option("--cache-name", cache_dataset_name,
                  "Name to save cached files");
 
-  app.add_option("--skip-images", skip_images, "Number of images to skip");
   app.add_option("--cam-types", cam_types,
                  "Type of cameras (eucm, ds, kb4, pinhole)")
       ->required();
+
+  app.add_option("--skip-images", skip_images, "Number of images to skip");
+  app.add_option("--start-image", start_image, "Index of the first image to use");
+  app.add_option("--end-image", end_image, "Index of the last image to use, negative means counting from the end");
 
   try {
     app.parse(argc, argv);
@@ -76,7 +81,7 @@ int main(int argc, char **argv) {
     cache_dataset_name = dataset_path.substr(dataset_path.rfind('/') + 1);
 
   basalt::CamCalib cv(dataset_path, dataset_type, aprilgrid_path, result_path,
-                      cache_dataset_name, skip_images, cam_types);
+                      cache_dataset_name, cam_types, skip_images, start_image, end_image);
 
   cv.renderingLoop();
 

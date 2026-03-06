@@ -61,8 +61,9 @@ class CamCalib {
  public:
   CamCalib(const std::string &dataset_path, const std::string &dataset_type,
            const std::string &aprilgrid_path, const std::string &cache_path,
-           const std::string &cache_dataset_name, int skip_images,
-           const std::vector<std::string> &cam_types, bool show_gui = true);
+           const std::string &cache_dataset_name,
+           const std::vector<std::string> &cam_types, int skip_images,
+           int start_image, int end_image, bool show_gui = true);
 
   ~CamCalib();
 
@@ -135,9 +136,11 @@ class CamCalib {
   std::string cache_path;
   std::string cache_dataset_name;
 
-  int skip_images;
-
   std::vector<std::string> cam_types;
+
+  int skip_images;
+  int start_image;
+  int end_image;
 
   bool show_gui;
 
