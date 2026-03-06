@@ -613,8 +613,11 @@ void CamCalib::initCamIntrinsics() {
           }
         }
 
-        w = img_vec[j].img->w;
-        h = img_vec[j].img->h;
+        const ManagedImage<uint16_t>::Ptr &img = img_vec[j].img;
+        if (img) {
+          w = img->w;
+          h = img->h;
+        }
       }
 
       BASALT_ASSERT(w > 0 && h > 0);
