@@ -107,6 +107,8 @@ class CamCalib {
   void setOptIntrinsics(bool opt) { opt_intr = opt; }
 
  private:
+  bool cornersComplete() const;
+
   static constexpr int UI_WIDTH = 300;
 
   static constexpr size_t RANSAC_THRESHOLD = 10;

@@ -94,7 +94,8 @@ CamCalib::CamCalib(const std::string &dataset_path,
       vign_cutoff("ui.vign_cutoff", false, false, true),
       compute_vign("ui.compute_vign", std::bind(&CamCalib::computeVign, this)),
       save_calib("ui.save_calib", std::bind(&CamCalib::saveCalib, this)),
-      set_lin_resp("ui.set_lin_resp", std::bind(&CamCalib::setLinearResp, this)),
+      set_lin_resp("ui.set_lin_resp",
+                   std::bind(&CamCalib::setLinearResp, this)),
       compute_resp("ui.compute_resp", std::bind(&CamCalib::computeResp, this)) {
   if (show_gui) initGui();
 
@@ -196,7 +197,8 @@ void CamCalib::computeVign() {
                   val /= std::numeric_limits<uint16_t>::max();
 
                   if (img_vec[j].exposure > 0) {
-                    val *= 0.001 / img_vec[j].exposure;  // bring to common exposure
+                    val *= 0.001 /
+                           img_vec[j].exposure;  // bring to common exposure
                   }
 
                   rv[k][2] = val;
@@ -234,7 +236,8 @@ void CamCalib::computeVign() {
                               "vignette camera " + std::to_string(i));
     }
 
-    vign_plotter->SetView(pangolin::XYRangef(0.0f, static_cast<float>(vign_data_log.Samples()), 0.0f, 1.0f));
+    vign_plotter->SetView(pangolin::XYRangef(
+        0.0f, static_cast<float>(vign_data_log.Samples()), 0.0f, 1.0f));
   }
 
   ve.save_vign_png(cache_path);
@@ -546,12 +549,7 @@ void CamCalib::detectCorners() {
 }
 
 void CamCalib::initCamIntrinsics() {
-  if (calib_corners.empty()) {
-    std::cerr << "No corners detected. Press detect_corners to start corner "
-                 "detection."
-              << std::endl;
-    return;
-  }
+  if (!cornersComplete()) return;
 
   std::cout << "Started camera intrinsics initialization" << std::endl;
 
@@ -574,13 +572,17 @@ void CamCalib::initCamIntrinsics() {
       TimeCamId tcid(timestamp_ns, j);
 
       if (calib_corners.find(tcid) != calib_corners.end()) {
+        const ManagedImage<uint16_t>::Ptr &img = img_vec[j].img;
+        if (!img) {
+          continue;
+        }
+
         CalibCornerData cid = calib_corners.at(tcid);
 
         Eigen::Vector4d init_intr;
 
         bool success = CalibHelper::initializeIntrinsics(
-            cid.corners, cid.corner_ids, april_grid, img_vec[j].img->w,
-            img_vec[j].img->h, init_intr);
+            cid.corners, cid.corner_ids, april_grid, img->w, img->h, init_intr);
 
         if (success) {
           cam_initialized[j] = true;
@@ -679,12 +681,7 @@ void CamCalib::initCamIntrinsics() {
 }
 
 void CamCalib::initCamPoses() {
-  if (calib_corners.empty()) {
-    std::cerr << "No corners detected. Press detect_corners to start corner "
-                 "detection."
-              << std::endl;
-    return;
-  }
+  if (!cornersComplete()) return;
 
   if (!calib_opt.get() || !calib_opt->calibInitialized()) {
     std::cerr << "No initial intrinsics. Press init_intrinsics initialize "
@@ -848,6 +845,7 @@ void CamCalib::initOptimization() {
       invalid_frames.insert(kv.first);
   }
 
+  std::unordered_set<int64_t> pose_timestamps;
   for (size_t j = 0; j < vio_dataset->get_image_timestamps().size(); ++j) {
     int64_t timestamp_ns = vio_dataset->get_image_timestamps()[j];
 
@@ -873,6 +871,7 @@ void CamCalib::initOptimization() {
       calib_opt->addPoseMeasurement(
           timestamp_ns, cp_it->second.T_a_c *
                             calib_opt->calib->T_i_c[max_inliers_idx].inverse());
+      pose_timestamps.insert(timestamp_ns);
     } else {
       // Set all frames invalid if we do not have initial pose
       for (size_t cam_id = 0; cam_id < calib_opt->calib->T_i_c.size();
@@ -883,7 +882,8 @@ void CamCalib::initOptimization() {
   }
 
   for (const auto &kv : calib_corners) {
-    if (invalid_frames.count(kv.first) == 0)
+    if (invalid_frames.count(kv.first) == 0 &&
+        pose_timestamps.count(kv.first.frame_id) > 0)
       calib_opt->addAprilgridMeasurement(kv.first.frame_id, kv.first.cam_id,
                                          kv.second.corners,
                                          kv.second.corner_ids);
@@ -934,6 +934,19 @@ void CamCalib::loadDataset() {
       archive(calib_corners_rejected);
 
       std::cout << "Loaded detected corners from: " << path << std::endl;
+
+      const size_t num_missing =
+          CalibHelper::getMissingCornerFrames(
+              vio_dataset->get_image_timestamps(), calib_corners)
+              .size();
+      if (num_missing > 0) {
+        std::cerr << "Warning: " << num_missing << " of "
+                  << vio_dataset->get_image_timestamps().size()
+                  << " selected images have no corner data in the cache "
+                     "(created with different start/end/skip image options?). "
+                     "Press detect_corners to detect the missing frames."
+                  << std::endl;
+      }
     } else {
       std::cout << "No pre-processed detected corners found" << std::endl;
     }
@@ -1211,5 +1224,27 @@ void CamCalib::drawImageOverlay(pangolin::View &v, size_t cam_id) {
 }
 
 bool CamCalib::hasCorners() const { return !calib_corners.empty(); }
+
+bool CamCalib::cornersComplete() const {
+  if (calib_corners.empty()) {
+    std::cerr << "No corners detected. Press detect_corners to start corner "
+                 "detection."
+              << std::endl;
+    return false;
+  }
+
+  const size_t num_missing =
+      CalibHelper::getMissingCornerFrames(vio_dataset->get_image_timestamps(),
+                                          calib_corners)
+          .size();
+  if (num_missing > 0) {
+    std::cerr << "Corners are missing for " << num_missing << " of "
+              << vio_dataset->get_image_timestamps().size()
+              << " selected images. Press detect_corners first." << std::endl;
+    return false;
+  }
+
+  return true;
+}
 
 }  // namespace basalt

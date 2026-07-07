@@ -112,14 +112,14 @@ struct AprilgridCornersData {
 
 class VioDataset {
  public:
-  virtual ~VioDataset(){};
+  virtual ~VioDataset() {};
 
   virtual size_t get_num_cams() const = 0;
 
   virtual std::vector<int64_t> &get_image_timestamps() = 0;
+  virtual Eigen::aligned_vector<AccelData> &get_accel_data() = 0;
+  virtual Eigen::aligned_vector<GyroData> &get_gyro_data() = 0;
 
-  virtual const Eigen::aligned_vector<AccelData> &get_accel_data() const = 0;
-  virtual const Eigen::aligned_vector<GyroData> &get_gyro_data() const = 0;
   virtual const std::vector<int64_t> &get_gt_timestamps() const = 0;
   virtual const Eigen::aligned_vector<Sophus::SE3d> &get_gt_pose_data()
       const = 0;
@@ -137,7 +137,7 @@ class DatasetIoInterface {
   virtual void reset() = 0;
   virtual VioDatasetPtr get_data() = 0;
 
-  virtual ~DatasetIoInterface(){};
+  virtual ~DatasetIoInterface() {};
 };
 
 typedef std::shared_ptr<DatasetIoInterface> DatasetIoInterfacePtr;

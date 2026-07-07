@@ -41,6 +41,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <basalt/optimization/spline_optimize.h>
 
+#include <algorithm>
+#include <unordered_set>
+
 namespace basalt {
 
 CamImuCalib::CamImuCalib(const std::string &dataset_path,
@@ -257,12 +260,7 @@ void CamImuCalib::detectCorners() {
 }
 
 void CamImuCalib::initCamPoses() {
-  if (calib_corners.empty()) {
-    std::cerr << "No corners detected. Press detect_corners to start corner "
-                 "detection."
-              << std::endl;
-    return;
-  }
+  if (!cornersComplete()) return;
 
   if (!calib_opt.get() || !calib_opt->calibInitialized()) {
     std::cerr << "No camera intrinsics. Calibrate camera using "
@@ -394,6 +392,8 @@ void CamImuCalib::initCamImuTransform() {
 }
 
 void CamImuCalib::initOptimization() {
+  if (!cornersComplete()) return;
+
   if (!calib_opt.get() || !calib_opt->calibInitialized()) {
     std::cerr << "No camera intrinsics. Calibrate camera using "
                  "basalt_calibrate first!"
@@ -411,7 +411,14 @@ void CamImuCalib::initOptimization() {
     calib_opt->addGyroMeasurement(gd.timestamp_ns, gd.data);
   }
 
+  // Skip cached corners outside the current image selection; adding them
+  // would expand the spline over the whole recording.
+  const std::unordered_set<int64_t> selected_timestamps(
+      vio_dataset->get_image_timestamps().begin(),
+      vio_dataset->get_image_timestamps().end());
+
   for (const auto &kv : calib_corners) {
+    if (selected_timestamps.count(kv.first.frame_id) == 0) continue;
     if (kv.second.corner_ids.size() >= MIN_CORNERS)
       calib_opt->addAprilgridMeasurement(kv.first.frame_id, kv.first.cam_id,
                                          kv.second.corners,
@@ -585,17 +592,59 @@ void CamImuCalib::loadDataset() {
   setNumCameras(vio_dataset->get_num_cams());
 
   if (skip_images > 1 || start_image > 0 || end_image != 0) {
+    const size_t num_images = vio_dataset->get_image_timestamps().size();
+    const size_t first_idx = start_image > 0 ? start_image : 0;
+    const size_t last_idx =
+        end_image > 0
+            ? std::min(size_t(end_image), num_images)
+            : (num_images >= size_t(-end_image) ? num_images + end_image : 0);
+
     std::vector<int64_t> new_image_timestamps;
-    for (size_t i = start_image;
-         i < (end_image > 0
-                  ? end_image
-                  : vio_dataset->get_image_timestamps().size() + end_image);
-         ++i) {
+    new_image_timestamps.reserve(num_images);
+    for (size_t i = first_idx; i < last_idx; ++i) {
       if (i % skip_images == 0) {
         new_image_timestamps.push_back(vio_dataset->get_image_timestamps()[i]);
       }
     }
+
+    if (new_image_timestamps.empty()) {
+      std::cerr << "No images left after applying the start/end/skip image "
+                   "options. Aborting."
+                << std::endl;
+      std::abort();
+    }
+
     vio_dataset->get_image_timestamps() = new_image_timestamps;
+
+    // Keep IMU data slightly beyond the selected image interval, so that the
+    // spline stays constrained at the first and last frame even with a
+    // moderate camera-IMU time offset.
+    constexpr int64_t TRIM_MARGIN_NS = 100000000;  // 100 ms
+    const int64_t keep_from = new_image_timestamps.front() - TRIM_MARGIN_NS;
+    const int64_t keep_to = new_image_timestamps.back() + TRIM_MARGIN_NS;
+
+    const auto trim_imu_data = [&](auto &data, const char *name) {
+      if (data.empty()) return;
+      auto first = std::lower_bound(
+          data.begin(), data.end(), keep_from,
+          [](const auto &meas, int64_t t) { return meas.timestamp_ns < t; });
+      if (first != data.begin()) --first;  // bracketing sample before
+      auto last = std::upper_bound(
+          first, data.end(), keep_to,
+          [](int64_t t, const auto &meas) { return t < meas.timestamp_ns; });
+      if (last != data.end()) ++last;  // bracketing sample after
+      std::cout << "Original " << name << " data size: " << data.size()
+                << " new size: " << std::distance(first, last)
+                << " trimmed elements at the beginning: "
+                << std::distance(data.begin(), first)
+                << " trimmed elements at the end: "
+                << std::distance(last, data.end()) << std::endl;
+      data.erase(last, data.end());
+      data.erase(data.begin(), first);
+    };
+
+    trim_imu_data(vio_dataset->get_accel_data(), "accel");
+    trim_imu_data(vio_dataset->get_gyro_data(), "gyro");
   }
 
   // load detected corners if they exist
@@ -614,6 +663,19 @@ void CamImuCalib::loadDataset() {
       archive(calib_corners_rejected);
 
       std::cout << "Loaded detected corners from: " << path << std::endl;
+
+      const size_t num_missing =
+          CalibHelper::getMissingCornerFrames(
+              vio_dataset->get_image_timestamps(), calib_corners)
+              .size();
+      if (num_missing > 0) {
+        std::cerr << "Warning: " << num_missing << " of "
+                  << vio_dataset->get_image_timestamps().size()
+                  << " selected images have no corner data in the cache "
+                     "(created with different start/end/skip image options?). "
+                     "Press detect_corners to detect the missing frames."
+                  << std::endl;
+      }
     } else {
       std::cout << "No pre-processed detected corners found" << std::endl;
     }
@@ -1162,5 +1224,27 @@ void CamImuCalib::drawPlots() {
 }
 
 bool CamImuCalib::hasCorners() const { return !calib_corners.empty(); }
+
+bool CamImuCalib::cornersComplete() const {
+  if (calib_corners.empty()) {
+    std::cerr << "No corners detected. Press detect_corners to start corner "
+                 "detection."
+              << std::endl;
+    return false;
+  }
+
+  const size_t num_missing =
+      CalibHelper::getMissingCornerFrames(vio_dataset->get_image_timestamps(),
+                                          calib_corners)
+          .size();
+  if (num_missing > 0) {
+    std::cerr << "Corners are missing for " << num_missing << " of "
+              << vio_dataset->get_image_timestamps().size()
+              << " selected images. Press detect_corners first." << std::endl;
+    return false;
+  }
+
+  return true;
+}
 
 }  // namespace basalt

@@ -35,6 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef DATASET_IO_ROSBAG_H
 #define DATASET_IO_ROSBAG_H
 
+#include <cmath>
 #include <mutex>
 #include <optional>
 
@@ -85,13 +86,9 @@ class RosbagVioDataset : public VioDataset {
   size_t get_num_cams() const { return num_cams; }
 
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
+  Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
+  Eigen::aligned_vector<GyroData> &get_gyro_data() { return gyro_data; }
 
-  const Eigen::aligned_vector<AccelData> &get_accel_data() const {
-    return accel_data;
-  }
-  const Eigen::aligned_vector<GyroData> &get_gyro_data() const {
-    return gyro_data;
-  }
   const std::vector<int64_t> &get_gt_timestamps() const {
     return gt_timestamps;
   }
@@ -132,15 +129,21 @@ class RosbagVioDataset : public VioDataset {
         }
 
         if (img_msg->encoding == "mono8") {
-          const uint8_t *data_in = img_msg->data.data();
           uint16_t *data_out = id.img->ptr;
-
-          for (size_t i = 0; i < img_msg->data.size(); i++) {
-            int val = data_in[i];
-            val = val << 8;
-            data_out[i] = val;
+          for (const auto &data_in : img_msg->data) {
+            *data_out = data_in << 8;
+            ++data_out;
           }
 
+        } else if (img_msg->encoding == "bgr8" || img_msg->encoding == "rgb8") {
+          uint16_t *data_out = id.img->ptr;
+          for (auto data_in = img_msg->data.begin();
+               data_in < img_msg->data.end(); data_in += 3) {
+            uint16_t gray =
+                std::round((data_in[0] + data_in[1] + data_in[2]) / 3.0);
+            *data_out = gray << 8;
+            ++data_out;
+          }
         } else if (img_msg->encoding == "mono16") {
           std::memcpy(id.img->ptr, img_msg->data.data(), img_msg->data.size());
         } else {

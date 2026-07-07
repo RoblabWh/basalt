@@ -67,18 +67,14 @@ class EurocVioDataset : public VioDataset {
   std::vector<std::unordered_map<int64_t, double>> exposure_times;
 
  public:
-  ~EurocVioDataset(){};
+  ~EurocVioDataset() {};
 
   size_t get_num_cams() const { return num_cams; }
 
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
+  Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
+  Eigen::aligned_vector<GyroData> &get_gyro_data() { return gyro_data; }
 
-  const Eigen::aligned_vector<AccelData> &get_accel_data() const {
-    return accel_data;
-  }
-  const Eigen::aligned_vector<GyroData> &get_gyro_data() const {
-    return gyro_data;
-  }
   const std::vector<int64_t> &get_gt_timestamps() const {
     return gt_timestamps;
   }

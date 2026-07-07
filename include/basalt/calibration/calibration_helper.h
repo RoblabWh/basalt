@@ -77,6 +77,10 @@ using CalibInitPoseMap =
 
 class CalibHelper {
  public:
+  static std::vector<int64_t> getMissingCornerFrames(
+      const std::vector<int64_t>& image_timestamps,
+      const CalibCornerMap& calib_corners);
+
   static void detectCorners(const VioDatasetPtr& vio_data,
                             const AprilGrid& april_grid,
                             CalibCornerMap& calib_corners,
@@ -118,12 +122,12 @@ class CalibHelper {
 };
 
 template <class T>
-inline uint64_t calculateCaptureTimeNs(const Eigen::aligned_vector<T> &data) {
+inline uint64_t calculateCaptureTimeNs(const Eigen::aligned_vector<T>& data) {
   return data.back().timestamp_ns - data.front().timestamp_ns;
 }
 
 template <class T>
-inline double calculateRate(const Eigen::aligned_vector<T> &data) {
+inline double calculateRate(const Eigen::aligned_vector<T>& data) {
   const uint64_t duration = calculateCaptureTimeNs(data);
   const double dt = duration / (data.size() - 1.);
   return 1e9 / dt;

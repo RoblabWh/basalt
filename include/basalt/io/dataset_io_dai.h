@@ -42,16 +42,10 @@ class DaiVioDataset : public VioDataset {
 
   size_t get_num_cams() const { return cam_meta.size(); }
 
-  std::vector<int64_t> &get_image_timestamps() {
-    return image_timestamps;
-  }
+  std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
+  Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
+  Eigen::aligned_vector<GyroData> &get_gyro_data() { return gyro_data; }
 
-  const Eigen::aligned_vector<AccelData> &get_accel_data() const {
-    return accel_data;
-  }
-  const Eigen::aligned_vector<GyroData> &get_gyro_data() const {
-    return gyro_data;
-  }
   const std::vector<int64_t> &get_gt_timestamps() const {
     return gt_timestamps;
   }

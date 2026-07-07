@@ -24,15 +24,15 @@ class CvVioDataset : public VioDataset {
   size_t get_num_cams() const { return captures.size(); }
 
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
+  Eigen::aligned_vector<AccelData> &get_accel_data() {
+    static Eigen::aligned_vector<AccelData> none;
+    return none;
+  }
+  Eigen::aligned_vector<GyroData> &get_gyro_data() {
+    static Eigen::aligned_vector<GyroData> none;
+    return none;
+  }
 
-  const Eigen::aligned_vector<AccelData> &get_accel_data() const {
-    static const Eigen::aligned_vector<AccelData> none;
-    return none;
-  }
-  const Eigen::aligned_vector<GyroData> &get_gyro_data() const {
-    static const Eigen::aligned_vector<GyroData> none;
-    return none;
-  }
   const std::vector<int64_t> &get_gt_timestamps() const {
     static const std::vector<int64_t> none;
     return none;

@@ -107,6 +107,8 @@ class CamImuCalib {
   void setOptIntrinsics(bool opt) { opt_intr = opt; }
 
  private:
+  bool cornersComplete() const;
+
   static constexpr int UI_WIDTH = 300;
 
   VioDatasetPtr vio_dataset;

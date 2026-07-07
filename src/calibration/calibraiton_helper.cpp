@@ -55,6 +55,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <opencv2/calib3d/calib3d.hpp>
 
+#include <unordered_set>
+
 namespace basalt {
 
 template <class CamT>
@@ -105,28 +107,61 @@ bool estimateTransformation(
   return ransac.inliers_.size() > 8;
 }
 
+std::vector<int64_t> CalibHelper::getMissingCornerFrames(
+    const std::vector<int64_t> &image_timestamps,
+    const CalibCornerMap &calib_corners) {
+  std::unordered_set<int64_t> detected_frames;
+  for (const auto &kv : calib_corners) {
+    detected_frames.insert(kv.first.frame_id);
+  }
+
+  std::vector<int64_t> missing;
+  for (int64_t timestamp_ns : image_timestamps) {
+    if (detected_frames.count(timestamp_ns) == 0)
+      missing.push_back(timestamp_ns);
+  }
+  return missing;
+}
+
 void CalibHelper::detectCorners(const VioDatasetPtr &vio_data,
                                 const AprilGrid &april_grid,
                                 CalibCornerMap &calib_corners,
                                 CalibCornerMap &calib_corners_rejected) {
-  calib_corners.clear();
-  calib_corners_rejected.clear();
+  std::vector<int64_t> timestamps_to_process =
+      getMissingCornerFrames(vio_data->get_image_timestamps(), calib_corners);
+
+  if (timestamps_to_process.empty()) {
+    std::cout << "Corner cache already covers all selected images. "
+                 "Re-detecting all frames from scratch."
+              << std::endl;
+    calib_corners.clear();
+    calib_corners_rejected.clear();
+    timestamps_to_process = vio_data->get_image_timestamps();
+  } else if (timestamps_to_process.size() <
+             vio_data->get_image_timestamps().size()) {
+    std::cout << "Detecting corners for " << timestamps_to_process.size()
+              << " missing frames ("
+              << vio_data->get_image_timestamps().size() -
+                     timestamps_to_process.size()
+              << " already cached)." << std::endl;
+  }
 
   tbb::parallel_for(
-      tbb::blocked_range<size_t>(0, vio_data->get_image_timestamps().size()),
+      tbb::blocked_range<size_t>(0, timestamps_to_process.size()),
       [&](const tbb::blocked_range<size_t> &r) {
         const int numTags = april_grid.getTagCols() * april_grid.getTagRows();
         ApriltagDetector ad(numTags);
 
         for (size_t j = r.begin(); j != r.end(); ++j) {
-          int64_t timestamp_ns = vio_data->get_image_timestamps()[j];
+          int64_t timestamp_ns = timestamps_to_process[j];
           const std::vector<ImageData> &img_vec =
               vio_data->get_image_data(timestamp_ns);
 
           for (size_t i = 0; i < img_vec.size(); i++) {
+            CalibCornerData ccd_good;
+            CalibCornerData ccd_bad;
+
             if (img_vec[i].img.get()) {
-              CalibCornerData ccd_good;
-              CalibCornerData ccd_bad;
               ad.detectTags(*img_vec[i].img, ccd_good.corners,
                             ccd_good.corner_ids, ccd_good.radii,
                             ccd_bad.corners, ccd_bad.corner_ids, ccd_bad.radii);
@@ -138,12 +173,12 @@ void CalibHelper::detectCorners(const VioDatasetPtr &vio_data,
               //                          << "corners (" <<
               //                          ccd_bad.corners.size()
               //                          << " rejected)" << std::endl;
-
-              TimeCamId tcid(timestamp_ns, i);
-
-              calib_corners.emplace(tcid, ccd_good);
-              calib_corners_rejected.emplace(tcid, ccd_bad);
             }
+
+            TimeCamId tcid(timestamp_ns, i);
+
+            calib_corners.emplace(tcid, ccd_good);
+            calib_corners_rejected.emplace(tcid, ccd_bad);
           }
         }
       });
