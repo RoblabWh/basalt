@@ -765,29 +765,29 @@ void CamCalib::initCamExtrinsics() {
 
   std::vector<bool> cameras_initialized(vio_dataset->get_num_cams(), false);
   cameras_initialized[0] = true;
-  size_t last_camera = 0;
   calib_opt->calib->T_i_c[0] = Sophus::SE3d();  // Identity
 
-  auto next_max_weight_edge = [&](size_t cam_id) {
+  // Returns the maximum weight edge that connects an already initialized
+  // camera (first) to an uninitialized camera (second), together with the
+  // timestamp of the frame where both observed the pattern.
+  auto next_max_weight_edge = [&]() {
     int max_weight = -1;
-    std::pair<int, int64_t> res(-1, -1);
+    std::tuple<int, int, int64_t> res(-1, -1, -1);
 
-    for (size_t i = 0; i < vio_dataset->get_num_cams(); i++) {
-      if (cameras_initialized[i]) continue;
+    for (const auto &kv : cam_graph) {
+      const size_t cam_i = kv.first.first;
+      const size_t cam_j = kv.first.second;
 
-      std::pair<size_t, size_t> edge_id;
+      if (cameras_initialized[cam_i] == cameras_initialized[cam_j]) continue;
 
-      if (i < cam_id) {
-        edge_id = std::make_pair(i, cam_id);
-      } else if (i > cam_id) {
-        edge_id = std::make_pair(cam_id, i);
-      }
+      if (max_weight < kv.second.first) {
+        max_weight = kv.second.first;
 
-      auto it = cam_graph.find(edge_id);
-      if (it != cam_graph.end() && max_weight < it->second.first) {
-        max_weight = it->second.first;
-        res.first = i;
-        res.second = it->second.second;
+        if (cameras_initialized[cam_i]) {
+          res = std::make_tuple(int(cam_i), int(cam_j), kv.second.second);
+        } else {
+          res = std::make_tuple(int(cam_j), int(cam_i), kv.second.second);
+        }
       }
     }
 
@@ -795,24 +795,31 @@ void CamCalib::initCamExtrinsics() {
   };
 
   for (size_t i = 0; i < vio_dataset->get_num_cams() - 1; i++) {
-    std::pair<int, int64_t> res = next_max_weight_edge(last_camera);
+    const auto [init_camera, new_camera, timestamp_ns] = next_max_weight_edge();
 
-    std::cout << "Initializing camera pair " << last_camera << " " << res.first
+    if (new_camera < 0) break;
+
+    std::cout << "Initializing camera pair " << init_camera << " " << new_camera
               << std::endl;
 
-    if (res.first >= 0) {
-      size_t new_camera = res.first;
+    TimeCamId tcid_init(timestamp_ns, init_camera);
+    TimeCamId tcid_new(timestamp_ns, new_camera);
 
-      TimeCamId tcid_last(res.second, last_camera);
-      TimeCamId tcid_new(res.second, new_camera);
+    calib_opt->calib->T_i_c[new_camera] =
+        calib_opt->calib->T_i_c[init_camera] *
+        calib_init_poses.at(tcid_init).T_a_c.inverse() *
+        calib_init_poses.at(tcid_new).T_a_c;
 
-      calib_opt->calib->T_i_c[new_camera] =
-          calib_opt->calib->T_i_c[last_camera] *
-          calib_init_poses.at(tcid_last).T_a_c.inverse() *
-          calib_init_poses.at(tcid_new).T_a_c;
+    cameras_initialized[new_camera] = true;
+  }
 
-      last_camera = new_camera;
-      cameras_initialized[last_camera] = true;
+  for (size_t j = 0; j < vio_dataset->get_num_cams(); j++) {
+    if (!cameras_initialized[j]) {
+      std::cerr << "Warning: could not initialize extrinsics for camera " << j
+                << ": there is no frame where camera " << j
+                << " and an already initialized camera both see at least "
+                << MIN_CORNERS << " corners of the calibration grid."
+                << std::endl;
     }
   }
 
