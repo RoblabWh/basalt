@@ -16,18 +16,32 @@ namespace basalt {
 class AllanVarianceComputor;
 class AllanDeviations;
 
+struct ImuCalibOptions {
+  std::string dataset_path;
+  std::string dataset_type;
+  std::string cache_path;
+  std::string cache_dataset_name;
+  // Default values from https://github.com/ori-drs/allan_variance_ros
+  double wn_min = 0.1;
+  double wn_max = 10.;
+  double rr_min = 0.1;
+  double rr_max = 1000.;
+  double period_min = 0.1;
+  double period_max = 1000.;
+  bool show_gui = true;
+};
+
 class ImuCalib {
  public:
-  ImuCalib(const std::string &dataset_path, const std::string &dataset_type,
-           const std::string &cache_path, const std::string &cache_dataset_name,
-           double wn_min, double wn_max, double rr_min, double rr_max,
-           double period_min, double period_max, bool show_gui = true);
+  explicit ImuCalib(const ImuCalibOptions &options);
 
   ~ImuCalib();
 
   void initGui();
 
   void renderingLoop();
+
+  int runHeadless();
 
   void loadDataset();
 

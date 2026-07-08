@@ -143,3 +143,19 @@ The following options control the optimization process:
 * `huber_thresh` controls the threshold for the huber norm in pixels for the optimization.
 * `opt_until_convg` runs the optimization until convergence.
 * `stop_thresh` defines the stopping criterion. Optimization will stop when the maximum increment is smaller than this value.
+
+## Headless mode
+
+All three calibration tools accept a `--headless` flag that runs the full calibration pipeline without the GUI and exits. The steps are executed in the same order as the GUI buttons described above, the optimization runs until convergence, and the result is saved to the result folder automatically:
+```
+basalt_calibrate_cam --dataset-path ~/tumvi_calib_data/dataset-calib-cam3.bag --dataset-type bag --aprilgrid /usr/local/etc/basalt/aprilgrid_6x6.json --result-path ~/tumvi_calib_result/ --cam-types ds ds --headless
+basalt_calibrate_imu --dataset-path ~/tumvi_calib_data/dataset-calib-imu-static2.bag --dataset-type bag --result-path ~/tumvi_calib_result/ --period-min 0.005 --period-max 50000 --wn-min 0.02 --wn-max 1.0 --rr-min 1000.0 --rr-max 6000.0 --headless
+basalt_calibrate_vi --dataset-path ~/tumvi_calib_data/dataset-calib-imu1.bag --dataset-type bag --aprilgrid /usr/local/etc/basalt/aprilgrid_6x6.json --result-path ~/tumvi_calib_result/ --headless
+```
+
+The GUI parameters described above are available as command line options (defaults match the GUI): `--opt-intr`, `--huber-thresh` and `--stop-thresh` for both `basalt_calibrate_cam` and `basalt_calibrate_vi`; `--opt-poses`, `--opt-cam-time-offset` and `--opt-imu-scale` for `basalt_calibrate_vi` only. In addition:
+* `--max-iterations` limits the number of optimization iterations (default 100).
+* `--compute-vignette` / `--compute-response` (`basalt_calibrate_cam`) run the experimental vignette / response estimation after the optimization, like the `compute_vign` / `compute_resp` buttons.
+* `--save-mocap` (`basalt_calibrate_vi`) enables Mocap optimization and additionally saves `mocap_calibration.json`, like the `init_mocap` and `save_mocap_calib` buttons.
+
+Exit codes: `0` on success, `1` if a pipeline step fails (e.g. no corners detected, or no previous camera calibration found for `basalt_calibrate_vi`), `2` if the optimization did not converge within `--max-iterations` (the current estimate is still saved).

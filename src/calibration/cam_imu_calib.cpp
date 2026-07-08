@@ -46,23 +46,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace basalt {
 
-CamImuCalib::CamImuCalib(const std::string &dataset_path,
-                         const std::string &dataset_type,
-                         const std::string &aprilgrid_path,
-                         const std::string &cache_path,
-                         const std::string &cache_dataset_name,
-                         const std::vector<double> &imu_noise, int skip_images,
-                         int start_image, int end_image, bool show_gui)
-    : dataset_path(dataset_path),
-      dataset_type(dataset_type),
-      april_grid(aprilgrid_path),
-      cache_path(ensure_trailing_slash(cache_path)),
-      cache_dataset_name(cache_dataset_name),
-      skip_images(skip_images),
-      start_image(start_image),
-      end_image(end_image),
-      show_gui(show_gui),
-      imu_noise(imu_noise),
+CamImuCalib::CamImuCalib(const CamImuCalibOptions &options)
+    : dataset_path(options.dataset_path),
+      dataset_type(options.dataset_type),
+      april_grid(options.aprilgrid_path),
+      cache_path(ensure_trailing_slash(options.cache_path)),
+      cache_dataset_name(options.cache_dataset_name),
+      skip_images(options.skip_images),
+      start_image(options.start_image),
+      end_image(options.end_image),
+      show_gui(options.show_gui),
+      imu_noise({options.accel_noise_std, options.gyro_noise_std,
+                 options.accel_bias_std, options.gyro_bias_std}),
       show_frame("ui.show_frame", 0, 0, 1500),
       show_ids("ui.show_ids", false, false, true),
       show_data("ui.show_data", true, false, true),
@@ -84,13 +79,14 @@ CamImuCalib::CamImuCalib(const std::string &dataset_path,
       show_rot_error("ui.show_rot_error", false, false, true),
       init_opt(
         "ui.init_opt", std::bind(&CamImuCalib::initOptimization, this)),
-      opt_intr("ui.opt_intr", false, false, true),
-      opt_poses("ui.opt_poses", false, false, true),
+      opt_intr("ui.opt_intr", options.opt_intr, false, true),
+      opt_poses("ui.opt_poses", options.opt_poses, false, true),
       opt_corners("ui.opt_corners", true, false, true),
-      opt_cam_time_offset("ui.opt_cam_time_offset", false, false, true),
-      opt_imu_scale("ui.opt_imu_scale", false, false, true),
-      huber_thresh("ui.huber_thresh", 4.0, 0.1, 10.0),
-      stop_thresh("ui.stop_thresh", 1e-8, 1e-10, 0.01, true),
+      opt_cam_time_offset(
+        "ui.opt_cam_time_offset", options.opt_cam_time_offset, false, true),
+      opt_imu_scale("ui.opt_imu_scale", options.opt_imu_scale, false, true),
+      huber_thresh("ui.huber_thresh", options.huber_thresh, 0.1, 10.0),
+      stop_thresh("ui.stop_thresh", options.stop_thresh, 1e-10, 0.01, true),
       opt(
         "ui.optimize", std::bind(&CamImuCalib::optimize, this)),
       opt_until_convg("ui.opt_until_converge", false, false, true),
@@ -99,7 +95,7 @@ CamImuCalib::CamImuCalib(const std::string &dataset_path,
       show_mocap("ui.show_mocap", false, false, true),
       show_mocap_rot_error("ui.show_mocap_rot_error", false, false, true),
       show_mocap_rot_vel("ui.show_mocap_rot_vel", false, false, true),
-      opt_mocap("ui.opt_mocap", false, false, true),
+      opt_mocap("ui.opt_mocap", options.opt_mocap, false, true),
       init_mocap(
         "ui.init_mocap", std::bind(&CamImuCalib::initMocap, this)),
       save_mocap_calib(
@@ -151,7 +147,7 @@ void CamImuCalib::renderingLoop() {
   while (!pangolin::ShouldQuit()) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (vio_dataset.get()) {
+    if (vio_dataset) {
       if (show_frame.GuiChanged()) {
         size_t frame_id = static_cast<size_t>(show_frame);
         int64_t timestamp = vio_dataset->get_image_timestamps()[frame_id];
@@ -160,7 +156,7 @@ void CamImuCalib::renderingLoop() {
             vio_dataset->get_image_data(timestamp);
 
         for (size_t cam_id = 0; cam_id < vio_dataset->get_num_cams(); cam_id++)
-          if (img_vec[cam_id].img.get()) {
+          if (img_vec[cam_id].img) {
             pangolin::GlPixFormat fmt;
             fmt.glformat = GL_LUMINANCE;
             fmt.gltype = GL_UNSIGNED_SHORT;
@@ -193,10 +189,67 @@ void CamImuCalib::renderingLoop() {
   }
 }
 
+int CamImuCalib::runHeadless(int max_iterations, bool save_mocap) {
+  if (show_gui) {
+    std::cerr << "runHeadless requires construction with show_gui=false."
+              << std::endl;
+    return 1;
+  }
+
+  loadDataset();
+
+  if (!calib_opt || !calib_opt->calibInitialized()) {
+    std::cerr << "No camera calibration found in the result path. Run "
+                 "basalt_calibrate_cam first."
+              << std::endl;
+    return 1;
+  }
+
+  if (!hasCorners()) {
+    detectCorners();
+  }
+  if (!hasCorners()) {
+    std::cerr << "No corners detected. Check the dataset and the Aprilgrid "
+                 "configuration."
+              << std::endl;
+    return 1;
+  }
+
+  initCamPoses();
+  if (calib_init_poses.empty()) {
+    std::cerr << "Failed to initialize camera poses." << std::endl;
+    return 1;
+  }
+
+  initCamImuTransform();
+  initOptimization();
+
+  bool converged = false;
+  int iteration = 0;
+  while (!converged && iteration < max_iterations) {
+    converged = optimizeWithParam(true);
+    iteration++;
+  }
+
+  if (save_mocap) {
+    initMocap();
+    saveMocapCalib();
+  }
+
+  saveCalib();
+
+  if (!converged) {
+    std::cerr << "Optimization did not converge after " << max_iterations
+              << " iterations. Saved the current estimate." << std::endl;
+    return 2;
+  }
+  return 0;
+}
+
 void CamImuCalib::computeProjections() {
   reprojected_corners.clear();
 
-  if (!calib_opt.get() || !vio_dataset.get()) return;
+  if (!calib_opt || !vio_dataset) return;
 
   for (size_t j = 0; j < vio_dataset->get_image_timestamps().size(); ++j) {
     int64_t timestamp_ns = vio_dataset->get_image_timestamps()[j];
@@ -262,7 +315,7 @@ void CamImuCalib::detectCorners() {
 void CamImuCalib::initCamPoses() {
   if (!cornersComplete()) return;
 
-  if (!calib_opt.get() || !calib_opt->calibInitialized()) {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
     std::cerr << "No camera intrinsics. Calibrate camera using "
                  "basalt_calibrate first!"
               << std::endl;
@@ -292,7 +345,7 @@ void CamImuCalib::initCamPoses() {
 }
 
 void CamImuCalib::initCamImuTransform() {
-  if (!calib_opt.get() || !calib_opt->calibInitialized()) {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
     std::cerr << "No camera intrinsics. Calibrate camera using "
                  "basalt_calibrate first!"
               << std::endl;
@@ -394,7 +447,7 @@ void CamImuCalib::initCamImuTransform() {
 void CamImuCalib::initOptimization() {
   if (!cornersComplete()) return;
 
-  if (!calib_opt.get() || !calib_opt->calibInitialized()) {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
     std::cerr << "No camera intrinsics. Calibrate camera using "
                  "basalt_calibrate first!"
               << std::endl;
@@ -475,7 +528,7 @@ void CamImuCalib::initOptimization() {
 }
 
 void CamImuCalib::initMocap() {
-  if (!calib_opt.get() || !calib_opt->calibInitialized()) {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
     std::cerr << "Initalize optimization first!" << std::endl;
     return;
   }
@@ -705,15 +758,17 @@ void CamImuCalib::loadDataset() {
 
     calib_opt->loadCalib(cache_path);
 
-    if (calib_opt->calib->imu_update_rate == 0) {
-      calib_opt->calib->accel_noise_std.setConstant(imu_noise[0]);
-      calib_opt->calib->gyro_noise_std.setConstant(imu_noise[1]);
-      calib_opt->calib->accel_bias_std.setConstant(imu_noise[2]);
-      calib_opt->calib->gyro_bias_std.setConstant(imu_noise[3]);
+    if (calib_opt->calibInitialized()) {
+      if (calib_opt->calib->imu_update_rate == 0) {
+        calib_opt->calib->accel_noise_std.setConstant(imu_noise[0]);
+        calib_opt->calib->gyro_noise_std.setConstant(imu_noise[1]);
+        calib_opt->calib->accel_bias_std.setConstant(imu_noise[2]);
+        calib_opt->calib->gyro_bias_std.setConstant(imu_noise[3]);
 
-      std::cout << "No IMU calibration found, using defaults" << std::endl;
-    } else {
-      std::cout << "Found IMU calibration" << std::endl;
+        std::cout << "No IMU calibration found, using defaults" << std::endl;
+      } else {
+        std::cout << "Found IMU calibration" << std::endl;
+      }
     }
   }
   calib_opt->resetMocapCalib();
@@ -736,7 +791,7 @@ void CamImuCalib::optimize() { optimizeWithParam(true); }
 
 bool CamImuCalib::optimizeWithParam(bool print_info,
                                     std::map<std::string, double> *stats) {
-  if (!calib_opt.get() || !calib_opt->calibInitialized()) {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
     std::cerr << "Initalize optimization first!" << std::endl;
     return true;
   }

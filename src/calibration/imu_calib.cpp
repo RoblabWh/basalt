@@ -12,19 +12,14 @@ namespace basalt {
 
 const uint64_t LOG_DATAPOINTS = 10000;
 
-ImuCalib::ImuCalib(const std::string &dataset_path,
-                   const std::string &dataset_type,
-                   const std::string &cache_path,
-                   const std::string &cache_dataset_name, double wn_min,
-                   double wn_max, double rr_min, double rr_max,
-                   double period_min, double period_max, bool show_gui)
-    : dataset_path(dataset_path),
-      dataset_type(dataset_type),
-      cache_path(ensure_trailing_slash(cache_path)),
-      cache_dataset_name(cache_dataset_name),
-      period_min(period_min),
-      period_max(period_max),
-      show_gui(show_gui),
+ImuCalib::ImuCalib(const ImuCalibOptions &options)
+    : dataset_path(options.dataset_path),
+      dataset_type(options.dataset_type),
+      cache_path(ensure_trailing_slash(options.cache_path)),
+      cache_dataset_name(options.cache_dataset_name),
+      period_min(options.period_min),
+      period_max(options.period_max),
+      show_gui(options.show_gui),
       show_data("ui.show_data", true, false, true),
       center_data("ui.center_data", true, false, true),
       show_accel("ui.show_accel", true, false, true),
@@ -33,10 +28,14 @@ ImuCalib::ImuCalib(const std::string &dataset_path,
       show_rr("ui.show_rr", true, false, true),
       load_dataset("ui.load_dataset", std::bind(&ImuCalib::loadDataset, this)),
       comp("ui.compute", std::bind(&ImuCalib::compute, this)),
-      wn_min("ui.wn_min", wn_min, period_min, period_max),
-      wn_max("ui.wn_max", wn_max, period_min, period_max),
-      rr_min("ui.rr_min", rr_min, period_min, period_max),
-      rr_max("ui.rr_max", rr_max, period_min, period_max),
+      wn_min("ui.wn_min", options.wn_min, options.period_min,
+             options.period_max),
+      wn_max("ui.wn_max", options.wn_max, options.period_min,
+             options.period_max),
+      rr_min("ui.rr_min", options.rr_min, options.period_min,
+             options.period_max),
+      rr_max("ui.rr_max", options.rr_max, options.period_min,
+             options.period_max),
       fit("ui.fit_lines", std::bind(&ImuCalib::fitLines, this)),
       save_calib("ui.save_calib", std::bind(&ImuCalib::saveCalib, this)) {
   if (show_gui) initGui();
@@ -82,6 +81,21 @@ void ImuCalib::renderingLoop() {
 
     pangolin::FinishFrame();
   }
+}
+
+int ImuCalib::runHeadless() {
+  if (show_gui) {
+    std::cerr << "runHeadless requires construction with show_gui=false."
+              << std::endl;
+    return 1;
+  }
+
+  loadDataset();
+  compute();
+  fitLines();
+  saveCalib();
+
+  return 0;
 }
 
 void ImuCalib::loadDataset() {

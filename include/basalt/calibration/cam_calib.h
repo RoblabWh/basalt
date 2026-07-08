@@ -57,13 +57,25 @@ namespace basalt {
 
 class PosesOptimization;
 
+struct CamCalibOptions {
+  std::string dataset_path;
+  std::string dataset_type;
+  std::string aprilgrid_path;
+  std::string cache_path;
+  std::string cache_dataset_name;
+  std::vector<std::string> cam_types;
+  int skip_images = 1;
+  int start_image = 0;
+  int end_image = 0;
+  bool opt_intr = true;
+  double huber_thresh = 4.0;
+  double stop_thresh = 1e-8;
+  bool show_gui = true;
+};
+
 class CamCalib {
  public:
-  CamCalib(const std::string &dataset_path, const std::string &dataset_type,
-           const std::string &aprilgrid_path, const std::string &cache_path,
-           const std::string &cache_dataset_name,
-           const std::vector<std::string> &cam_types, int skip_images,
-           int start_image, int end_image, bool show_gui = true);
+  explicit CamCalib(const CamCalibOptions &options);
 
   ~CamCalib();
 
@@ -78,6 +90,9 @@ class CamCalib {
   void setNumCameras(size_t n);
 
   void renderingLoop();
+
+  int runHeadless(int max_iterations, bool compute_vignette,
+                  bool compute_response);
 
   void computeProjections();
 
@@ -103,8 +118,6 @@ class CamCalib {
   void drawImageOverlay(pangolin::View &v, size_t cam_id);
 
   bool hasCorners() const;
-
-  void setOptIntrinsics(bool opt) { opt_intr = opt; }
 
  private:
   bool cornersComplete() const;

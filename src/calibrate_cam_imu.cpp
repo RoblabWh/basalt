@@ -40,47 +40,60 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <CLI/CLI.hpp>
 
 int main(int argc, char **argv) {
-  std::string dataset_path;
-  std::string dataset_type;
-  std::string aprilgrid_path;
-  std::string result_path;
-  std::string cache_dataset_name;
-  int skip_images = 1;
-  int start_image = 0;
-  int end_image = 0;
-
-  double accel_noise_std = 0.016;
-  double gyro_noise_std = 0.000282;
-  double accel_bias_std = 0.001;
-  double gyro_bias_std = 0.0001;
+  basalt::CamImuCalibOptions opts;
+  bool headless = false;
+  int max_iterations = 100;
+  bool save_mocap = false;
 
   CLI::App app{"Calibrate IMU"};
 
-  app.add_option("--dataset-path", dataset_path, "Path to dataset")->required();
-  app.add_option("--result-path", result_path, "Path to result folder")
+  app.add_option("--dataset-path", opts.dataset_path, "Path to dataset")
       ->required();
-  app.add_option("--dataset-type", dataset_type, "Dataset type (euroc, bag)")
+  app.add_option("--result-path", opts.cache_path, "Path to result folder")
+      ->required();
+  app.add_option("--dataset-type", opts.dataset_type,
+                 "Dataset type (euroc, bag)")
       ->required();
 
-  app.add_option("--aprilgrid", aprilgrid_path,
+  app.add_option("--aprilgrid", opts.aprilgrid_path,
                  "Path to Aprilgrid config file)")
       ->required();
 
-  app.add_option("--gyro-noise-std", gyro_noise_std, "Gyroscope noise std");
-  app.add_option("--accel-noise-std", accel_noise_std,
+  app.add_option("--gyro-noise-std", opts.gyro_noise_std,
+                 "Gyroscope noise std");
+  app.add_option("--accel-noise-std", opts.accel_noise_std,
                  "Accelerometer noise std");
 
-  app.add_option("--gyro-bias-std", gyro_bias_std,
+  app.add_option("--gyro-bias-std", opts.gyro_bias_std,
                  "Gyroscope bias random walk std");
-  app.add_option("--accel-bias-std", accel_bias_std,
+  app.add_option("--accel-bias-std", opts.accel_bias_std,
                  "Accelerometer bias random walk std");
 
-  app.add_option("--cache-name", cache_dataset_name,
+  app.add_option("--cache-name", opts.cache_dataset_name,
                  "Name to save cached files");
 
-  app.add_option("--skip-images", skip_images, "Number of images to skip");
-  app.add_option("--start-image", start_image, "Index of the first image to use");
-  app.add_option("--end-image", end_image, "Index of the last image to use, negative means counting from the end");
+  app.add_option("--skip-images", opts.skip_images, "Number of images to skip");
+  app.add_option("--start-image", opts.start_image,
+                 "Index of the first image to use");
+  app.add_option(
+      "--end-image", opts.end_image,
+      "Index of the last image to use, negative means counting from the end");
+
+  app.add_flag("--headless", headless, "Run calibration without GUI and exit");
+  app.add_option("--opt-intr", opts.opt_intr, "Optimize camera intrinsics");
+  app.add_option("--opt-poses", opts.opt_poses, "Optimize camera poses");
+  app.add_option("--opt-cam-time-offset", opts.opt_cam_time_offset,
+                 "Optimize camera-IMU time offset");
+  app.add_option("--opt-imu-scale", opts.opt_imu_scale,
+                 "Optimize IMU scale and axis alignment");
+  app.add_option("--huber-thresh", opts.huber_thresh,
+                 "Huber threshold for optimization (pixels)");
+  app.add_option("--stop-thresh", opts.stop_thresh,
+                 "Optimization convergence threshold");
+  app.add_option("--max-iterations", max_iterations,
+                 "Maximum number of optimization iterations (headless)");
+  app.add_flag("--save-mocap", save_mocap,
+               "Optimize and save Mocap calibration (headless)");
 
   try {
     app.parse(argc, argv);
@@ -88,16 +101,19 @@ int main(int argc, char **argv) {
     return app.exit(e);
   }
 
-  if (cache_dataset_name.empty())
-    cache_dataset_name = dataset_path.substr(dataset_path.rfind('/') + 1);
+  opts.show_gui = !headless;
+  opts.opt_mocap = save_mocap;
 
-  basalt::CamImuCalib cv(
-      dataset_path, dataset_type, aprilgrid_path, result_path,
-      cache_dataset_name,
-      {accel_noise_std, gyro_noise_std, accel_bias_std, gyro_bias_std},
-      skip_images, start_image, end_image);
+  if (opts.cache_dataset_name.empty())
+    opts.cache_dataset_name =
+        opts.dataset_path.substr(opts.dataset_path.rfind('/') + 1);
+
+  basalt::CamImuCalib cv(opts);
+
+  if (headless) {
+    return cv.runHeadless(max_iterations, save_mocap);
+  }
 
   cv.renderingLoop();
-
   return 0;
 }

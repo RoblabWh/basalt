@@ -161,7 +161,7 @@ void CalibHelper::detectCorners(const VioDatasetPtr &vio_data,
             CalibCornerData ccd_good;
             CalibCornerData ccd_bad;
 
-            if (img_vec[i].img.get()) {
+            if (img_vec[i].img) {
               ad.detectTags(*img_vec[i].img, ccd_good.corners,
                             ccd_good.corner_ids, ccd_good.radii,
                             ccd_bad.corners, ccd_bad.corner_ids, ccd_bad.radii);

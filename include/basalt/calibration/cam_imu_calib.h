@@ -57,13 +57,32 @@ namespace basalt {
 template <int N, typename Scalar>
 class SplineOptimization;
 
+struct CamImuCalibOptions {
+  std::string dataset_path;
+  std::string dataset_type;
+  std::string aprilgrid_path;
+  std::string cache_path;
+  std::string cache_dataset_name;
+  double accel_noise_std = 0.016;
+  double gyro_noise_std = 0.000282;
+  double accel_bias_std = 0.001;
+  double gyro_bias_std = 0.0001;
+  int skip_images = 1;
+  int start_image = 0;
+  int end_image = 0;
+  bool opt_intr = false;
+  bool opt_poses = false;
+  bool opt_cam_time_offset = false;
+  bool opt_imu_scale = false;
+  bool opt_mocap = false;
+  double huber_thresh = 4.0;
+  double stop_thresh = 1e-8;
+  bool show_gui = true;
+};
+
 class CamImuCalib {
  public:
-  CamImuCalib(const std::string &dataset_path, const std::string &dataset_type,
-              const std::string &aprilgrid_path, const std::string &cache_path,
-              const std::string &cache_dataset_name,
-              const std::vector<double> &imu_noise, int skip_images,
-              int start_image, int end_image, bool show_gui = true);
+  explicit CamImuCalib(const CamImuCalibOptions &options);
 
   ~CamImuCalib();
 
@@ -72,6 +91,8 @@ class CamImuCalib {
   void setNumCameras(size_t n);
 
   void renderingLoop();
+
+  int runHeadless(int max_iterations, bool save_mocap);
 
   void computeProjections();
 
@@ -103,8 +124,6 @@ class CamImuCalib {
   void drawPlots();
 
   bool hasCorners() const;
-
-  void setOptIntrinsics(bool opt) { opt_intr = opt; }
 
  private:
   bool cornersComplete() const;

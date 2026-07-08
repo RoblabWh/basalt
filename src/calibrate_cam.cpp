@@ -38,38 +38,53 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <CLI/CLI.hpp>
 
 int main(int argc, char **argv) {
-  std::string dataset_path;
-  std::string dataset_type;
-  std::string aprilgrid_path;
-  std::string result_path;
-  std::vector<std::string> cam_types;
-  std::string cache_dataset_name;
-  int skip_images = 1;
-  int start_image = 0;
-  int end_image = 0;
+  basalt::CamCalibOptions opts;
+  bool headless = false;
+  int max_iterations = 100;
+  bool compute_vignette = false;
+  bool compute_response = false;
 
   CLI::App app{"Calibrate IMU"};
 
-  app.add_option("--dataset-path", dataset_path, "Path to dataset")->required();
-  app.add_option("--result-path", result_path, "Path to result folder")
+  app.add_option("--dataset-path", opts.dataset_path, "Path to dataset")
       ->required();
-  app.add_option("--dataset-type", dataset_type, "Dataset type (euroc, bag)")
+  app.add_option("--result-path", opts.cache_path, "Path to result folder")
+      ->required();
+  app.add_option("--dataset-type", opts.dataset_type,
+                 "Dataset type (euroc, bag)")
       ->required();
 
-  app.add_option("--aprilgrid", aprilgrid_path,
+  app.add_option("--aprilgrid", opts.aprilgrid_path,
                  "Path to Aprilgrid config file)")
       ->required();
 
-  app.add_option("--cache-name", cache_dataset_name,
+  app.add_option("--cache-name", opts.cache_dataset_name,
                  "Name to save cached files");
 
-  app.add_option("--cam-types", cam_types,
+  app.add_option("--cam-types", opts.cam_types,
                  "Type of cameras (eucm, ds, kb4, pinhole)")
       ->required();
 
-  app.add_option("--skip-images", skip_images, "Number of images to skip");
-  app.add_option("--start-image", start_image, "Index of the first image to use");
-  app.add_option("--end-image", end_image, "Index of the last image to use, negative means counting from the end");
+  app.add_option("--skip-images", opts.skip_images, "Number of images to skip");
+  app.add_option("--start-image", opts.start_image,
+                 "Index of the first image to use");
+  app.add_option(
+      "--end-image", opts.end_image,
+      "Index of the last image to use, negative means counting from the end");
+
+  app.add_flag("--headless", headless, "Run calibration without GUI and exit");
+  app.add_option("--opt-intr", opts.opt_intr, "Optimize camera intrinsics");
+  app.add_option("--huber-thresh", opts.huber_thresh,
+                 "Huber threshold for optimization (pixels)");
+  app.add_option("--stop-thresh", opts.stop_thresh,
+                 "Optimization convergence threshold");
+  app.add_option("--max-iterations", max_iterations,
+                 "Maximum number of optimization iterations (headless)");
+  app.add_flag("--compute-vignette", compute_vignette,
+               "Compute vignette after optimization (headless)");
+  app.add_flag("--compute-response", compute_response,
+               "Compute inverse response function after optimization "
+               "(headless)");
 
   try {
     app.parse(argc, argv);
@@ -77,13 +92,18 @@ int main(int argc, char **argv) {
     return app.exit(e);
   }
 
-  if (cache_dataset_name.empty())
-    cache_dataset_name = dataset_path.substr(dataset_path.rfind('/') + 1);
+  opts.show_gui = !headless;
 
-  basalt::CamCalib cv(dataset_path, dataset_type, aprilgrid_path, result_path,
-                      cache_dataset_name, cam_types, skip_images, start_image, end_image);
+  if (opts.cache_dataset_name.empty())
+    opts.cache_dataset_name =
+        opts.dataset_path.substr(opts.dataset_path.rfind('/') + 1);
+
+  basalt::CamCalib cv(opts);
+
+  if (headless) {
+    return cv.runHeadless(max_iterations, compute_vignette, compute_response);
+  }
 
   cv.renderingLoop();
-
   return 0;
 }
