@@ -421,6 +421,9 @@ void CamCalib::computeProjections() {
   for (size_t j = 0; j < vio_dataset->get_image_timestamps().size(); ++j) {
     int64_t timestamp_ns = vio_dataset->get_image_timestamps()[j];
 
+    // Skip frames that have no pose in the optimization
+    if (!calib_opt->hasPose(timestamp_ns)) continue;
+
     for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
       TimeCamId tcid(timestamp_ns, i);
 

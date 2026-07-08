@@ -82,7 +82,7 @@ class PosesOptimization {
                   << calib->intrinsics.back().getName() << std::endl;
       }
     }
-    calib->T_i_c.resize(num_cams);
+    calib->T_i_c.assign(num_cams, SE3());
   }
 
   void loadCalib(const std::string &p) {
@@ -250,6 +250,10 @@ class PosesOptimization {
       return Sophus::SE3d();
     else
       return it->second;
+  }
+
+  bool hasPose(int64_t t_ns) const {
+    return timestam_to_pose.find(t_ns) != timestam_to_pose.end();
   }
 
   void setAprilgridCorners3d(const Eigen::aligned_vector<Eigen::Vector4d> &v) {
