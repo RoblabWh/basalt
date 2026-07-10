@@ -39,9 +39,32 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <basalt/io/dataset_io_euroc.h>
 #include <basalt/io/dataset_io_kitti.h>
 #include <basalt/io/dataset_io_rosbag.h>
+#include <basalt/io/dataset_io_rosbag2.h>
 #include <basalt/io/dataset_io_uzh.h>
 
 namespace basalt {
+
+namespace {
+class RosbagAutoIO : public DatasetIoInterface {
+ public:
+  void read(const std::string &path) {
+    io = isRos2Bag(path) ? DatasetIoInterfacePtr(new Rosbag2IO)
+                            : DatasetIoInterfacePtr(new RosbagIO);
+    io->read(path);
+  }
+
+  void reset() {
+    if (io) io->reset();
+    io.reset();
+  }
+
+  VioDatasetPtr get_data() { return io ? io->get_data() : nullptr; }
+
+ private:
+  DatasetIoInterfacePtr io;
+};
+
+}  // namespace
 
 DatasetIoInterfacePtr DatasetIoFactory::getDatasetIo(
     const std::string &dataset_type, bool load_mocap_as_gt) {
@@ -50,7 +73,7 @@ DatasetIoInterfacePtr DatasetIoFactory::getDatasetIo(
   } else if (dataset_type == "euroc") {
     return DatasetIoInterfacePtr(new EurocIO(load_mocap_as_gt));
   } else if (dataset_type == "bag") {
-    return DatasetIoInterfacePtr(new RosbagIO);
+    return DatasetIoInterfacePtr(new RosbagAutoIO);
   } else if (dataset_type == "uzh") {
     return DatasetIoInterfacePtr(new UzhIO);
   } else if (dataset_type == "kitti") {

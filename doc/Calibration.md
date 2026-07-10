@@ -6,7 +6,7 @@ Supported dataset formats include:
 - euroc: [EuRoC MAV](https://projects.asl.ethz.ch/datasets/euroc-mav/) and [TUM VI](https://cvg.cit.tum.de/data/datasets/visual-inertial-dataset)
 - uzh: [UZH-FPV](https://fpv.ifi.uzh.ch/)
 - kitti: [KITTI](https://www.cvlibs.net/datasets/kitti/eval_odometry.php)
-- bag: ROS1 bag files with exposure times in nanoseconds encoded in the `frame_id` field of the header, as done in [TUM VI](https://cvg.cit.tum.de/data/datasets/visual-inertial-dataset)
+- bag: ROS1 and ROS2 bags with exposure times in nanoseconds encoded in the `frame_id` field of the header, as done in [TUM VI](https://cvg.cit.tum.de/data/datasets/visual-inertial-dataset)
 - cv: OpenCV VideoCapture for videos and image sequences - **ONLY** for geometric camera calibration (no exposure times or IMU data)
 
 ## TUM-VI dataset

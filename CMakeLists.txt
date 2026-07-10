@@ -316,6 +316,7 @@ target_sources(basalt
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_euroc.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_kitti.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_rosbag.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_rosbag2.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/dataset_io_uzh.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/io/marg_data_io.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/linearization/block_diagonal.hpp
@@ -394,7 +395,7 @@ target_sources(basalt
 
 target_link_libraries(basalt
   PUBLIC ${STD_CXX_FS} basalt::opencv basalt::basalt-headers TBB::tbb
-  PRIVATE basalt::magic_enum rosbag apriltag opengv nlohmann::json fmt::fmt)
+  PRIVATE basalt::magic_enum rosbag rosbag2 apriltag opengv nlohmann::json fmt::fmt)
 target_include_directories(basalt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(basalt PUBLIC ${BASALT_COMPILE_DEFINITIONS})
 #target_compile_definitions(basalt PUBLIC BASALT_DISABLE_ASSERTS)

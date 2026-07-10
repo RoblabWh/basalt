@@ -19,6 +19,8 @@ deps=(
   libglew-dev
   # Rosbag
   libbz2-dev liblz4-dev
+  # Rosbag2
+  libsqlite3-dev libzstd-dev
 )
 
 apt-get update
