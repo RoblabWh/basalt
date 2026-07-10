@@ -295,8 +295,39 @@ class SplineOptimization {
 
     if (spline.numKnots() == 0) {
       spline.setStartTimeNs(min_time_us);
-      spline.setKnots(pose_measurements.front().data,
-                      time_interval_us / dt_ns + N + 1);
+      const size_t num_knots = time_interval_us / dt_ns + N + 1;
+      spline.setKnots(pose_measurements.front().data, num_knots);
+
+      // Initialize the knots by interpolating the pose measurements over
+      // time. A constant-first-pose init leaves the trajectory arbitrarily
+      // far from the measurements, and the first (barely damped) LM step can
+      // then push weakly constrained parameters like T_i_c out of the
+      // convergence basin.
+      if (pose_measurements.size() >= 2) {
+        auto it_next = pose_measurements.begin();
+        auto it_prev = it_next++;
+        for (size_t i = 0; i < num_knots; i++) {
+          const int64_t t_ns = min_time_us + int64_t(i) * dt_ns;
+          while (it_next != pose_measurements.end() &&
+                 it_next->timestamp_ns < t_ns) {
+            it_prev = it_next++;
+          }
+          SE3 knot_pose;
+          if (it_next == pose_measurements.end() ||
+              t_ns <= it_prev->timestamp_ns) {
+            knot_pose = it_prev->data;
+          } else {
+            const double s =
+                double(t_ns - it_prev->timestamp_ns) /
+                double(it_next->timestamp_ns - it_prev->timestamp_ns);
+            knot_pose =
+                it_prev->data *
+                SE3::exp(s * (it_prev->data.inverse() * it_next->data).log());
+          }
+          spline.getKnotSO3(i) = knot_pose.so3();
+          spline.getKnotPos(i) = knot_pose.translation();
+        }
+      }
     }
 
     recompute_size();
