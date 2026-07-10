@@ -489,12 +489,26 @@ void CamImuCalib::initOptimization() {
   for (size_t j = 0; j < vio_dataset->get_image_timestamps().size(); ++j) {
     int64_t timestamp_ns = vio_dataset->get_image_timestamps()[j];
 
-    TimeCamId tcid(timestamp_ns, 0);
-    const auto cp_it = calib_init_poses.find(tcid);
+    // On a multi-camera rig a single camera loses sight of the grid for long
+    // stretches (opposite cameras never see it together), so take the rig
+    // pose from the best-initialized camera of this frame instead of relying
+    // on cam0 alone. Otherwise the initial trajectory is unconstrained
+    // exactly where the other cameras have their measurements.
+    const CalibInitPoseData *best_cp = nullptr;
+    size_t best_cam = 0;
+    for (size_t cam = 0; cam < vio_dataset->get_num_cams(); cam++) {
+      const auto cp_it = calib_init_poses.find(TimeCamId(timestamp_ns, cam));
+      if (cp_it == calib_init_poses.end()) continue;
+      if (cp_it->second.num_inliers < MIN_CORNERS) continue;
+      if (!best_cp || cp_it->second.num_inliers > best_cp->num_inliers) {
+        best_cp = &cp_it->second;
+        best_cam = cam;
+      }
+    }
 
-    if (cp_it != calib_init_poses.end()) {
+    if (best_cp) {
       Sophus::SE3d T_a_i =
-          cp_it->second.T_a_c * calib_opt->getCamT_i_c(0).inverse();
+          best_cp->T_a_c * calib_opt->getCamT_i_c(best_cam).inverse();
 
       calib_opt->addPoseMeasurement(timestamp_ns, T_a_i);
 
