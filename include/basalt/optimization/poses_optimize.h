@@ -270,6 +270,11 @@ class PosesOptimization {
     ccd.offset_intrinsics = &offset_cam_intrinsics;
   }
 
+  void clearMeasurements() {
+    timestam_to_pose.clear();
+    aprilgrid_corners_measurements.clear();
+  }
+
   void addAprilgridMeasurement(
       int64_t t_ns, int cam_id,
       const Eigen::aligned_vector<Eigen::Vector2d> &corners_pos,

@@ -444,6 +444,23 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
     iteration++;
   }
 
+  // Recompute the poses with the optimized calibration and rerun the
+  // optimization on the recovered frames.
+  if (converged) {
+    std::cout << "Recomputing initial poses with the optimized calibration "
+                 "to recover frames excluded by the rough initialization."
+              << std::endl;
+    initCamPoses();
+    initOptimization();
+
+    converged = false;
+    iteration = 0;
+    while (!converged && iteration < max_iterations) {
+      converged = optimizeWithParam(true);
+      iteration++;
+    }
+  }
+
   if (compute_vignette || compute_response) {
     computeProjections();
   }
@@ -917,6 +934,8 @@ void CamCalib::initOptimization() {
 
   calib_opt->setAprilgridCorners3d(april_grid.aprilgrid_corner_pos_3d);
 
+  calib_opt->clearMeasurements();
+
   std::unordered_set<TimeCamId> invalid_frames;
   for (const auto &kv : calib_corners) {
     if (kv.second.corner_ids.size() < MIN_CORNERS)
@@ -970,7 +989,9 @@ void CamCalib::initOptimization() {
   calib_opt->init();
   computeProjections();
 
-  std::cout << "Initialized optimization." << std::endl;
+  std::cout << "Initialized optimization with " << pose_timestamps.size()
+            << " of " << vio_dataset->get_image_timestamps().size()
+            << " frames." << std::endl;
 }  // namespace basalt
 
 void CamCalib::loadDataset() {
