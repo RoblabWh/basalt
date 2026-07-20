@@ -218,6 +218,7 @@ int main(int argc, char** argv) {
   int num_threads = 0;
   bool use_imu = true;
   bool use_double = false;
+  basalt::SensorFilter sensor_filter;
 
   CLI::App app{"App description"};
 
@@ -250,6 +251,11 @@ int main(int argc, char** argv) {
   app.add_option(
       "--max-frames", max_frames,
       "Limit number of frames to process from dataset (0 means unlimited)");
+  app.add_option("--include", sensor_filter.include,
+                 "Only use sensors matching one of these glob patterns");
+  app.add_option("--exclude", sensor_filter.exclude,
+                 "Exclude sensors matching one of these glob patterns; "
+                 "applied after --include");
 
   try {
     app.parse(argc, argv);
@@ -283,7 +289,7 @@ int main(int argc, char** argv) {
 
   {
     basalt::DatasetIoInterfacePtr dataset_io =
-        basalt::DatasetIoFactory::getDatasetIo(dataset_type);
+        basalt::DatasetIoFactory::getDatasetIo(dataset_type, sensor_filter);
 
     dataset_io->read(dataset_path);
 

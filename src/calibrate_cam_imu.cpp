@@ -72,6 +72,14 @@ int main(int argc, char **argv) {
   app.add_option("--cache-name", opts.cache_dataset_name,
                  "Name to save cached files");
 
+  app.add_option("--include", opts.sensor_include,
+                 "Only use sensors matching one of these glob patterns")
+      ->delimiter(',');
+  app.add_option("--exclude", opts.sensor_exclude,
+                 "Exclude sensors matching one of these glob patterns; "
+                 "applied after --include")
+      ->delimiter(',');
+
   app.add_option("--skip-images", opts.skip_images, "Number of images to skip");
   app.add_option("--start-image", opts.start_image,
                  "Index of the first image to use");

@@ -41,6 +41,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <tbb/concurrent_unordered_map.h>
 
+#include <map>
+
 namespace basalt {
 
 struct CalibCornerData {
@@ -60,7 +62,7 @@ struct ProjectedCornerData {
 };
 
 struct CalibInitPoseData {
-  Sophus::SE3d T_a_c;
+  Sophus::SE3<double, Eigen::DontAlign> T_a_c;
   size_t num_inliers;
 
   Eigen::aligned_vector<Eigen::Vector2d> reprojected_corners;
@@ -77,8 +79,8 @@ using CalibInitPoseMap =
 
 class CalibHelper {
  public:
-  static std::vector<int64_t> getMissingCornerFrames(
-      const std::vector<int64_t>& image_timestamps,
+  static std::map<int64_t, std::vector<size_t>> getMissingCorners(
+      const std::vector<int64_t>& image_timestamps, size_t num_cams,
       const CalibCornerMap& calib_corners);
 
   static void detectCorners(const VioDatasetPtr& vio_data,
@@ -136,6 +138,19 @@ inline double calculateRate(const Eigen::aligned_vector<T>& data) {
 }  // namespace basalt
 
 namespace cereal {
+// unaligned variant of the Sophus::SE3 serializer from
+// basalt/serialization/eigen_io.h; byte-compatible with it
+template <class Archive>
+void serialize(Archive& ar, Sophus::SE3<double, Eigen::DontAlign>& p) {
+  ar(cereal::make_nvp("px", p.translation()[0]),
+     cereal::make_nvp("py", p.translation()[1]),
+     cereal::make_nvp("pz", p.translation()[2]),
+     cereal::make_nvp("qx", p.so3().data()[0]),
+     cereal::make_nvp("qy", p.so3().data()[1]),
+     cereal::make_nvp("qz", p.so3().data()[2]),
+     cereal::make_nvp("qw", p.so3().data()[3]));
+}
+
 template <class Archive>
 void serialize(Archive& ar, basalt::CalibCornerData& c) {
   ar(c.corners, c.corner_ids, c.radii);

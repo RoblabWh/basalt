@@ -97,6 +97,9 @@ int main(int argc, char **argv) {
 
   bool show_gui = true;
 
+  basalt::SensorFilter sensor_filter;
+  sensor_filter.types = basalt::SensorTypes::Imu | basalt::SensorTypes::GroundTruth;
+
   CLI::App app{"Calibrate time offset"};
 
   app.add_option("-d,--dataset-path", dataset_path, "Path to dataset")
@@ -120,6 +123,14 @@ int main(int argc, char **argv) {
 
   app.add_option("--max-offset", max_offset_s,
                  "Maximum offset for a grid search in seconds.");
+
+  app.add_option("--include", sensor_filter.include,
+                 "Only use sensors matching one of these glob patterns")
+      ->delimiter(',');
+  app.add_option("--exclude", sensor_filter.exclude,
+                 "Exclude sensors matching one of these glob patterns; "
+                 "applied after --include")
+      ->delimiter(',');
 
   app.add_flag("--show-gui", show_gui, "Show GUI for debugging");
 
@@ -160,10 +171,18 @@ int main(int argc, char **argv) {
   }
 
   basalt::DatasetIoInterfacePtr dataset_io =
-      basalt::DatasetIoFactory::getDatasetIo(dataset_type, true);
+      basalt::DatasetIoFactory::getDatasetIo(dataset_type, sensor_filter);
 
   dataset_io->read(dataset_path);
   vio_dataset = dataset_io->get_data();
+
+  if (vio_dataset->is_gt_position_only()) {
+    std::cerr << "Error: the ground truth contains only positions, but the "
+                 "time alignment needs full poses to correlate rotational "
+                 "velocities."
+              << std::endl;
+    std::abort();
+  }
 
   std::vector<int64_t> gyro_timestamps;
   Eigen::aligned_vector<Eigen::Vector3d> gyro_data;

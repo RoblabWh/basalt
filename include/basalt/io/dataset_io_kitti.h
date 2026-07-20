@@ -45,6 +45,9 @@ namespace basalt {
 class KittiVioDataset : public VioDataset {
   size_t num_cams;
 
+  // names of the kept image folders
+  std::vector<std::string> cam_folders;
+
   std::string path;
 
   std::vector<int64_t> image_timestamps;
@@ -69,6 +72,8 @@ class KittiVioDataset : public VioDataset {
 
   size_t get_num_cams() const { return num_cams; }
 
+  std::vector<std::string> get_cam_names() const { return cam_folders; }
+
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
   Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
   Eigen::aligned_vector<GyroData> &get_gyro_data() { return gyro_data; }
@@ -84,10 +89,9 @@ class KittiVioDataset : public VioDataset {
   std::vector<ImageData> get_image_data(int64_t t_ns) {
     std::vector<ImageData> res(num_cams);
 
-    const std::vector<std::string> folder = {"/image_0/", "/image_1/"};
-
     for (size_t i = 0; i < num_cams; i++) {
-      std::string full_image_path = path + folder[i] + image_path[t_ns];
+      std::string full_image_path =
+          path + "/" + cam_folders[i] + "/" + image_path[t_ns];
 
       if (fs::exists(full_image_path)) {
         cv::Mat img = cv::imread(full_image_path, cv::IMREAD_UNCHANGED);
@@ -121,7 +125,7 @@ class KittiVioDataset : public VioDataset {
 
 class KittiIO : public DatasetIoInterface {
  public:
-  KittiIO() {}
+  using DatasetIoInterface::DatasetIoInterface;
 
   void read(const std::string &path) {
     if (!fs::exists(path))
@@ -129,7 +133,13 @@ class KittiIO : public DatasetIoInterface {
 
     data.reset(new KittiVioDataset);
 
-    data->num_cams = 2;
+    for (const std::string cam : {"image_0", "image_1"}) {
+      if (sensor_filter.keep(cam, SensorTypes::Camera))
+        data->cam_folders.push_back(cam);
+    }
+    sensor_filter.warn_unmatched({"image_0", "image_1"});
+
+    data->num_cams = data->cam_folders.size();
     data->path = path;
 
     read_image_timestamps(path + "/times.txt");

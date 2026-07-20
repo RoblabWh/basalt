@@ -107,18 +107,25 @@ bool estimateTransformation(
   return ransac.inliers_.size() > 8;
 }
 
-std::vector<int64_t> CalibHelper::getMissingCornerFrames(
-    const std::vector<int64_t> &image_timestamps,
+std::map<int64_t, std::vector<size_t>> CalibHelper::getMissingCorners(
+    const std::vector<int64_t> &image_timestamps, size_t num_cams,
     const CalibCornerMap &calib_corners) {
-  std::unordered_set<int64_t> detected_frames;
+  std::unordered_map<int64_t, std::vector<bool>> detected;
   for (const auto &kv : calib_corners) {
-    detected_frames.insert(kv.first.frame_id);
+    if (kv.first.cam_id >= num_cams) continue;
+    auto &cams = detected[kv.first.frame_id];
+    if (cams.empty()) cams.resize(num_cams, false);
+    cams[kv.first.cam_id] = true;
   }
 
-  std::vector<int64_t> missing;
+  std::map<int64_t, std::vector<size_t>> missing;
   for (int64_t timestamp_ns : image_timestamps) {
-    if (detected_frames.count(timestamp_ns) == 0)
-      missing.push_back(timestamp_ns);
+    auto it = detected.find(timestamp_ns);
+    std::vector<size_t> missing_cams;
+    for (size_t i = 0; i < num_cams; i++) {
+      if (it == detected.end() || !it->second[i]) missing_cams.push_back(i);
+    }
+    if (!missing_cams.empty()) missing[timestamp_ns] = std::move(missing_cams);
   }
   return missing;
 }
@@ -127,37 +134,50 @@ void CalibHelper::detectCorners(const VioDatasetPtr &vio_data,
                                 const AprilGrid &april_grid,
                                 CalibCornerMap &calib_corners,
                                 CalibCornerMap &calib_corners_rejected) {
-  std::vector<int64_t> timestamps_to_process =
-      getMissingCornerFrames(vio_data->get_image_timestamps(), calib_corners);
+  const size_t num_cams = vio_data->get_num_cams();
+  const size_t num_images = vio_data->get_image_timestamps().size() * num_cams;
 
-  if (timestamps_to_process.empty()) {
+  std::map<int64_t, std::vector<size_t>> missing = getMissingCorners(
+      vio_data->get_image_timestamps(), num_cams, calib_corners);
+
+  if (missing.empty()) {
     std::cout << "Corner cache already covers all selected images. "
                  "Re-detecting all frames from scratch."
               << std::endl;
     calib_corners.clear();
     calib_corners_rejected.clear();
-    timestamps_to_process = vio_data->get_image_timestamps();
-  } else if (timestamps_to_process.size() <
-             vio_data->get_image_timestamps().size()) {
-    std::cout << "Detecting corners for " << timestamps_to_process.size()
-              << " missing frames ("
-              << vio_data->get_image_timestamps().size() -
-                     timestamps_to_process.size()
-              << " already cached)." << std::endl;
+    std::vector<size_t> all_cams(num_cams);
+    for (size_t i = 0; i < num_cams; i++) all_cams[i] = i;
+    for (int64_t timestamp_ns : vio_data->get_image_timestamps()) {
+      missing[timestamp_ns] = all_cams;
+    }
+  } else {
+    size_t num_missing = 0;
+    for (const auto &kv : missing) num_missing += kv.second.size();
+    if (num_missing < num_images) {
+      std::cout << "Detecting corners for " << num_missing
+                << " missing images (" << num_images - num_missing
+                << " already cached)." << std::endl;
+    }
   }
 
+  std::vector<std::pair<int64_t, std::vector<size_t>>> work(missing.begin(),
+                                                            missing.end());
+
   tbb::parallel_for(
-      tbb::blocked_range<size_t>(0, timestamps_to_process.size()),
+      tbb::blocked_range<size_t>(0, work.size()),
       [&](const tbb::blocked_range<size_t> &r) {
         const int numTags = april_grid.getTagCols() * april_grid.getTagRows();
         ApriltagDetector ad(numTags);
 
         for (size_t j = r.begin(); j != r.end(); ++j) {
-          int64_t timestamp_ns = timestamps_to_process[j];
+          int64_t timestamp_ns = work[j].first;
           const std::vector<ImageData> &img_vec =
               vio_data->get_image_data(timestamp_ns);
 
-          for (size_t i = 0; i < img_vec.size(); i++) {
+          for (size_t i : work[j].second) {
+            if (i >= img_vec.size()) continue;
+
             CalibCornerData ccd_good;
             CalibCornerData ccd_bad;
 
@@ -453,15 +473,17 @@ void CalibHelper::computeInitialPose(
 
   bool success;
   size_t num_inliers;
+  Sophus::SE3d T_a_c;
 
   std::visit(
       [&](const auto &cam) {
-        Sophus::SE3d T_target_camera;
         success = estimateTransformation(cam, cd.corners, cd.corner_ids,
-                                         aprilgrid_corner_pos_3d, cp.T_a_c,
+                                         aprilgrid_corner_pos_3d, T_a_c,
                                          num_inliers);
       },
       calib->intrinsics[cam_id].variant);
+
+  cp.T_a_c = T_a_c;
 
   if (success) {
     Eigen::Matrix4d T_c_a_init = cp.T_a_c.inverse().matrix();

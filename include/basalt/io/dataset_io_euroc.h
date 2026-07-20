@@ -35,6 +35,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef DATASET_IO_EUROC_H
 #define DATASET_IO_EUROC_H
 
+#include <map>
+#include <set>
+
 #include <basalt/io/dataset_io.h>
 #include <basalt/utils/filesystem.h>
 
@@ -44,6 +47,9 @@ namespace basalt {
 
 class EurocVioDataset : public VioDataset {
   size_t num_cams;
+
+  // names of the kept camera folders under mav0
+  std::vector<std::string> cam_folders;
 
   std::string path;
 
@@ -61,6 +67,7 @@ class EurocVioDataset : public VioDataset {
   std::vector<int64_t> gt_timestamps;  // ordered gt timestamps
   Eigen::aligned_vector<Sophus::SE3d>
       gt_pose_data;  // TODO: change to eigen aligned
+  bool gt_position_only = false;
 
   int64_t mocap_to_imu_offset_ns = 0;
 
@@ -70,6 +77,8 @@ class EurocVioDataset : public VioDataset {
   ~EurocVioDataset() {};
 
   size_t get_num_cams() const { return num_cams; }
+
+  std::vector<std::string> get_cam_names() const { return cam_folders; }
 
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
   Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
@@ -82,16 +91,16 @@ class EurocVioDataset : public VioDataset {
     return gt_pose_data;
   }
 
+  bool is_gt_position_only() const { return gt_position_only; }
+
   int64_t get_mocap_to_imu_offset_ns() const { return mocap_to_imu_offset_ns; }
 
   std::vector<ImageData> get_image_data(int64_t t_ns) {
     std::vector<ImageData> res(num_cams);
 
-    const std::vector<std::string> folder = {"/mav0/cam0/", "/mav0/cam1/"};
-
     for (size_t i = 0; i < num_cams; i++) {
       std::string full_image_path =
-          path + folder[i] + "data/" + image_path[t_ns];
+          path + "/mav0/" + cam_folders[i] + "/data/" + image_path[t_ns];
 
       if (fs::exists(full_image_path)) {
         cv::Mat img = cv::imread(full_image_path, cv::IMREAD_UNCHANGED);
@@ -147,7 +156,7 @@ class EurocVioDataset : public VioDataset {
 
 class EurocIO : public DatasetIoInterface {
  public:
-  EurocIO(bool load_mocap_as_gt) : load_mocap_as_gt(load_mocap_as_gt) {}
+  using DatasetIoInterface::DatasetIoInterface;
 
   void read(const std::string &path) {
     if (!fs::exists(path))
@@ -155,30 +164,68 @@ class EurocIO : public DatasetIoInterface {
 
     data.reset(new EurocVioDataset);
 
-    data->num_cams = 2;
+    // ground-truth sources present on disk
+    enum class GtFormat { state, pose, position };
+    std::map<std::string, GtFormat> gt_sources;
+    for (const auto &[name, format] :
+         {std::pair<std::string, GtFormat>{"state_groundtruth_estimate0",
+                                           GtFormat::state},
+          {"gt", GtFormat::pose},
+          {"mocap0", GtFormat::pose},
+          {"leica0", GtFormat::position}}) {
+      if (fs::exists(path + "/mav0/" + name + "/data.csv"))
+        gt_sources[name] = format;
+    }
+
+    std::vector<std::string> all_sensor_names = {"cam0", "cam1", "imu0"};
+    for (const auto &kv : gt_sources) all_sensor_names.push_back(kv.first);
+
+    for (const std::string cam : {"cam0", "cam1"}) {
+      if (sensor_filter.keep(cam, SensorTypes::Camera))
+        data->cam_folders.push_back(cam);
+    }
+    sensor_filter.warn_unmatched(all_sensor_names);
+
+    std::set<std::string> gt_selected;
+    for (const auto &kv : gt_sources)
+      if (sensor_filter.keep(kv.first, SensorTypes::GroundTruth))
+        gt_selected.insert(kv.first);
+    abort_if_multiple_topics("ground-truth", gt_selected);
+
+    data->num_cams = data->cam_folders.size();
     data->path = path;
 
-    read_image_timestamps(path + "/mav0/cam0/");
+    if (!data->cam_folders.empty())
+      read_image_timestamps(path + "/mav0/" + data->cam_folders[0] + "/");
 
-    read_imu_data(path + "/mav0/imu0/");
+    if (sensor_filter.keep("imu0", SensorTypes::Imu))
+      read_imu_data(path + "/mav0/imu0/");
 
-    if (!load_mocap_as_gt &&
-        fs::exists(path + "/mav0/state_groundtruth_estimate0/data.csv")) {
-      read_gt_data_state(path + "/mav0/state_groundtruth_estimate0/");
-    } else if (!load_mocap_as_gt && fs::exists(path + "/mav0/gt/data.csv")) {
-      read_gt_data_pose(path + "/mav0/gt/");
-    } else if (fs::exists(path + "/mav0/mocap0/data.csv")) {
-      read_gt_data_pose(path + "/mav0/mocap0/");
+    if (!gt_selected.empty()) {
+      const std::string &name = *gt_selected.begin();
+      const std::string gt_path = path + "/mav0/" + name + "/";
+      switch (gt_sources.at(name)) {
+        case GtFormat::state:
+          read_gt_data_state(gt_path);
+          break;
+        case GtFormat::pose:
+          read_gt_data_pose(gt_path);
+          break;
+        case GtFormat::position:
+          read_gt_data_position(gt_path);
+          data->gt_position_only = true;
+          break;
+      }
     }
 
     data->exposure_times.resize(data->num_cams);
-    if (fs::exists(path + "/mav0/cam0/exposure.csv")) {
-      std::cout << "Loading exposure times for cam0" << std::endl;
-      read_exposure(path + "/mav0/cam0/", data->exposure_times[0]);
-    }
-    if (fs::exists(path + "/mav0/cam1/exposure.csv")) {
-      std::cout << "Loading exposure times for cam1" << std::endl;
-      read_exposure(path + "/mav0/cam1/", data->exposure_times[1]);
+    for (size_t i = 0; i < data->cam_folders.size(); i++) {
+      const std::string cam_path = path + "/mav0/" + data->cam_folders[i] + "/";
+      if (fs::exists(cam_path + "exposure.csv")) {
+        std::cout << "Loading exposure times for " << data->cam_folders[i]
+                  << std::endl;
+        read_exposure(cam_path, data->exposure_times[i]);
+      }
     }
   }
 
@@ -303,8 +350,29 @@ class EurocIO : public DatasetIoInterface {
     }
   }
 
+  void read_gt_data_position(const std::string &path) {
+    data->gt_timestamps.clear();
+    data->gt_pose_data.clear();
+
+    std::ifstream f(path + "data.csv");
+    std::string line;
+    while (std::getline(f, line)) {
+      if (line[0] == '#') continue;
+
+      std::stringstream ss(line);
+
+      char tmp;
+      uint64_t timestamp;
+      Eigen::Vector3d pos;
+
+      ss >> timestamp >> tmp >> pos[0] >> tmp >> pos[1] >> tmp >> pos[2];
+
+      data->gt_timestamps.emplace_back(timestamp);
+      data->gt_pose_data.emplace_back(Eigen::Quaterniond::Identity(), pos);
+    }
+  }
+
   std::shared_ptr<EurocVioDataset> data;
-  bool load_mocap_as_gt;
 };  // namespace basalt
 
 }  // namespace basalt

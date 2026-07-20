@@ -31,6 +31,22 @@ The command line options have the following meaning:
 * `--aprilgrid` path to the configuration file for the aprilgrid.
 * `--cam-types` camera models for the image streams in the dataset. For more details see [arXiv:1807.08957](https://arxiv.org/abs/1807.08957).
 
+### Selecting sensors
+
+Each tool loads only the sensor *kinds* it needs: `basalt_calibrate_cam` reads cameras only, `basalt_calibrate_imu` reads the IMU only, and `basalt_calibrate_vi` reads cameras, IMU and ground truth. Sensors of other kinds are ignored entirely, so for example camera calibration runs fine on a dataset that also happens to contain several IMUs.
+
+Within the kinds it loads, a tool uses every sensor found by default. `--include` and `--exclude` narrow this selection by name. Both take a list of glob patterns (`*`, `?`, `[...]`; repeatable or comma-separated). If `--include` is given, only sensors matching one of its patterns are used; `--exclude` is applied afterwards and removes sensors again. These options are available on all tools loading datasets.
+
+`basalt_calibrate_imu` and `basalt_calibrate_vi` each need exactly one IMU. If the dataset contains more than one, the tool aborts and lists them; use `--include`/`--exclude` to narrow the selection down to a single IMU. `basalt_calibrate_vi` applies the same single-selection rule to ground-truth (mocap pose / position) streams.
+
+The sensor names depend on the dataset type:
+* `bag` (ROS1/ROS2): the full topic name, e.g. `/cam0/image_raw`, `/imu0`. Applies to image, IMU, mocap and position topics, so `--include` can also pin which IMU topic is used in a multi-IMU bag.
+* `euroc`: `cam0`, `cam1`, `imu0`.
+* `uzh`: `left`, `right`, `imu`.
+* `kitti`: `image_0`, `image_1`.
+* `dai`: the camera csv/folder name under `cams/`, plus `imu`.
+* `cv`: the zero-based position in the video list, i.e. `0`, `1`, ...
+
 After that, you should see the calibration GUI:
 ![calibration_cam](/doc/img/calibration_cam.png)
 
@@ -69,7 +85,7 @@ The command line options have the following meaning:
 * `--dataset-path` path to the dataset.
 * `--dataset-type` type of the dataset.
 * `--result-path` path to the folder where the resulting calibration and intermediate results will be stored.
-* `--period-min` start period for allan plot. Result caching is dependent on this value.
+* `--period-min` start period for allan plot. Result caching is dependent on this value and on the selected IMU (see `compute` below).
 * `--period-max` end period for allan plot.
 * `--wn-min` start period for white noise.
 * `--wn-max` end period for white noise.

@@ -41,15 +41,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <basalt/io/dataset_io_rosbag.h>
 #include <basalt/io/dataset_io_rosbag2.h>
 #include <basalt/io/dataset_io_uzh.h>
+#include <memory>
 
 namespace basalt {
 
 namespace {
 class RosbagAutoIO : public DatasetIoInterface {
  public:
+  using DatasetIoInterface::DatasetIoInterface;
+
   void read(const std::string &path) {
-    io = isRos2Bag(path) ? DatasetIoInterfacePtr(new Rosbag2IO)
-                            : DatasetIoInterfacePtr(new RosbagIO);
+    io = isRos2Bag(path) ? std::static_pointer_cast<DatasetIoInterface>(
+                               std::make_shared<Rosbag2IO>(sensor_filter))
+                         : std::static_pointer_cast<DatasetIoInterface>(
+                               std::make_shared<RosbagIO>(sensor_filter));
     io->read(path);
   }
 
@@ -67,19 +72,19 @@ class RosbagAutoIO : public DatasetIoInterface {
 }  // namespace
 
 DatasetIoInterfacePtr DatasetIoFactory::getDatasetIo(
-    const std::string &dataset_type, bool load_mocap_as_gt) {
+    const std::string &dataset_type, SensorFilter sensor_filter) {
   if (dataset_type == "dai") {
-    return DatasetIoInterfacePtr(new DaiIO(load_mocap_as_gt));
+    return std::make_shared<DaiIO>(sensor_filter);
   } else if (dataset_type == "euroc") {
-    return DatasetIoInterfacePtr(new EurocIO(load_mocap_as_gt));
+    return std::make_shared<EurocIO>(sensor_filter);
   } else if (dataset_type == "bag") {
-    return DatasetIoInterfacePtr(new RosbagAutoIO);
+    return std::make_shared<RosbagAutoIO>(sensor_filter);
   } else if (dataset_type == "uzh") {
-    return DatasetIoInterfacePtr(new UzhIO);
+    return std::make_shared<UzhIO>(sensor_filter);
   } else if (dataset_type == "kitti") {
-    return DatasetIoInterfacePtr(new KittiIO);
+    return std::make_shared<KittiIO>(sensor_filter);
   } else if (dataset_type == "cv") {
-    return DatasetIoInterfacePtr(new CvIO);
+    return std::make_shared<CvIO>(sensor_filter);
   } else {
     std::cerr << "Dataset type " << dataset_type << " is not supported"
               << std::endl;

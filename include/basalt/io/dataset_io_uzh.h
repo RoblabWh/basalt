@@ -45,6 +45,9 @@ namespace basalt {
 class UzhVioDataset : public VioDataset {
   size_t num_cams;
 
+  // names of the kept cameras
+  std::vector<std::string> cam_names;
+
   std::string path;
 
   std::vector<int64_t> image_timestamps;
@@ -72,6 +75,8 @@ class UzhVioDataset : public VioDataset {
 
   size_t get_num_cams() const { return num_cams; }
 
+  std::vector<std::string> get_cam_names() const { return cam_names; }
+
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
   Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
   Eigen::aligned_vector<GyroData> &get_gyro_data() { return gyro_data; }
@@ -91,7 +96,8 @@ class UzhVioDataset : public VioDataset {
     for (size_t i = 0; i < num_cams; i++) {
       std::string full_image_path =
           path + "/" +
-          (i == 0 ? left_image_path.at(t_ns) : right_image_path.at(t_ns));
+          (cam_names[i] == "left" ? left_image_path.at(t_ns)
+                                  : right_image_path.at(t_ns));
 
       if (fs::exists(full_image_path)) {
         cv::Mat img = cv::imread(full_image_path, cv::IMREAD_UNCHANGED);
@@ -147,7 +153,7 @@ class UzhVioDataset : public VioDataset {
 
 class UzhIO : public DatasetIoInterface {
  public:
-  UzhIO() {}
+  using DatasetIoInterface::DatasetIoInterface;
 
   void read(const std::string &path) {
     if (!fs::exists(path))
@@ -155,7 +161,13 @@ class UzhIO : public DatasetIoInterface {
 
     data.reset(new UzhVioDataset);
 
-    data->num_cams = 2;
+    for (const std::string cam : {"left", "right"}) {
+      if (sensor_filter.keep(cam, SensorTypes::Camera))
+        data->cam_names.push_back(cam);
+    }
+    sensor_filter.warn_unmatched({"left", "right", "imu"});
+
+    data->num_cams = data->cam_names.size();
     data->path = path;
 
     read_image_timestamps(path);
@@ -171,7 +183,8 @@ class UzhIO : public DatasetIoInterface {
     //                << data->right_image_path.at(t_ns) << std::endl;
     //    }
 
-    read_imu_data(path + "/imu.txt");
+    if (sensor_filter.keep("imu", SensorTypes::Imu))
+      read_imu_data(path + "/imu.txt");
 
     std::cout << "Loaded " << data->get_gyro_data().size() << " imu msgs."
               << std::endl;
@@ -210,38 +223,25 @@ class UzhIO : public DatasetIoInterface {
   }
 
   void read_image_timestamps(const std::string &path) {
-    {
-      std::ifstream f(path + "/left_images.txt");
+    for (size_t i = 0; i < data->cam_names.size(); i++) {
+      const std::string &name = data->cam_names[i];
+      auto &image_path =
+          name == "left" ? data->left_image_path : data->right_image_path;
+
+      std::ifstream f(path + "/" + name + "_images.txt");
       std::string line;
       while (std::getline(f, line)) {
         if (line[0] == '#') continue;
         std::stringstream ss(line);
         int tmp;
         double t_s;
-        std::string path;
-        ss >> tmp >> t_s >> path;
+        std::string img_path;
+        ss >> tmp >> t_s >> img_path;
 
         int64_t t_ns = t_s * 1e9;
 
-        data->image_timestamps.emplace_back(t_ns);
-        data->left_image_path[t_ns] = path;
-      }
-    }
-
-    {
-      std::ifstream f(path + "/right_images.txt");
-      std::string line;
-      while (std::getline(f, line)) {
-        if (line[0] == '#') continue;
-        std::stringstream ss(line);
-        int tmp;
-        double t_s;
-        std::string path;
-        ss >> tmp >> t_s >> path;
-
-        int64_t t_ns = t_s * 1e9;
-
-        data->right_image_path[t_ns] = path;
+        if (i == 0) data->image_timestamps.emplace_back(t_ns);
+        image_path[t_ns] = img_path;
       }
     }
   }

@@ -48,6 +48,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <thread>
 
 #include <basalt/calibration/aprilgrid.h>
+#include <basalt/calibration/calib_cache.h>
 #include <basalt/calibration/calibration_helper.h>
 #include <basalt/image/image.h>
 #include <basalt/utils/test_utils.h>
@@ -64,6 +65,8 @@ struct CamCalibOptions {
   std::string cache_path;
   std::string cache_dataset_name;
   std::vector<std::string> cam_types;
+  std::vector<std::string> sensor_include;
+  std::vector<std::string> sensor_exclude;
   int skip_images = 1;
   int start_image = 0;
   int end_image = 0;
@@ -135,6 +138,10 @@ class CamCalib {
   CalibCornerMap calib_corners_rejected;
   CalibInitPoseMap calib_init_poses;
 
+  // cached data of currently deselected cameras (see calib_cache.h)
+  DormantCorners dormant_corners;
+  DormantPoses dormant_poses;
+
   std::shared_ptr<std::thread> processing_thread;
 
   std::shared_ptr<PosesOptimization> calib_opt;
@@ -145,6 +152,8 @@ class CamCalib {
 
   std::string dataset_path;
   std::string dataset_type;
+
+  SensorFilter sensor_filter;
 
   AprilGrid april_grid;
 

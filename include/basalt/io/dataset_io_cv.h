@@ -14,6 +14,8 @@ namespace basalt {
 
 class CvVioDataset : public VioDataset {
   std::vector<cv::VideoCapture> captures;
+  // names are the original (pre-filter) positions in the video list
+  std::vector<std::string> cam_names;
   std::mutex capture_lock;
   int64_t frame_pd;
   std::vector<int64_t> image_timestamps;
@@ -22,6 +24,8 @@ class CvVioDataset : public VioDataset {
   ~CvVioDataset() {};
 
   size_t get_num_cams() const { return captures.size(); }
+
+  std::vector<std::string> get_cam_names() const { return cam_names; }
 
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
   Eigen::aligned_vector<AccelData> &get_accel_data() {
@@ -115,7 +119,7 @@ class CvVioDataset : public VioDataset {
 
 class CvIO : public DatasetIoInterface {
  public:
-  CvIO() {}
+  using DatasetIoInterface::DatasetIoInterface;
 
   void read(const std::string &path) {
     data.reset(new CvVioDataset);
@@ -126,6 +130,24 @@ class CvIO : public DatasetIoInterface {
       idx = path.find(',', idx_last);
       paths.push_back(path.substr(idx_last, idx - idx_last));
       idx_last = idx + 1;
+    }
+
+    std::vector<std::string> all_sensor_names;
+    std::vector<std::string> kept_paths;
+    for (size_t i = 0; i < paths.size(); ++i) {
+      all_sensor_names.push_back(std::to_string(i));
+      if (sensor_filter.keep(std::to_string(i), SensorTypes::Camera)) {
+        kept_paths.push_back(paths[i]);
+        data->cam_names.push_back(std::to_string(i));
+      }
+    }
+    sensor_filter.warn_unmatched(all_sensor_names);
+    paths = kept_paths;
+
+    if (paths.empty()) {
+      std::cerr << "All input videos were removed by the sensor filter"
+                << std::endl;
+      std::abort();
     }
 
     data->captures.resize(paths.size());

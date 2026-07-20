@@ -50,11 +50,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <tbb/concurrent_map.h>
 #include <tbb/parallel_for.h>
 
+#include <algorithm>
+
 namespace basalt {
 
 CamCalib::CamCalib(const CamCalibOptions &options)
     : dataset_path(options.dataset_path),
       dataset_type(options.dataset_type),
+      sensor_filter{options.sensor_include, options.sensor_exclude,
+                    SensorTypes::Camera},
       april_grid(options.aprilgrid_path),
       cache_path(ensure_trailing_slash(options.cache_path)),
       cache_dataset_name(options.cache_dataset_name),
@@ -398,7 +402,7 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
 
   loadDataset();
 
-  if (!hasCorners()) {
+  if (!cornersComplete()) {
     detectCorners();
   }
   if (!hasCorners()) {
@@ -593,11 +597,8 @@ void CamCalib::detectCorners() {
 
     std::string path =
         cache_path + cache_dataset_name + "_detected_corners.cereal";
-    std::ofstream os(path, std::ios::binary);
-    cereal::BinaryOutputArchive archive(os);
-
-    archive(this->calib_corners);
-    archive(this->calib_corners_rejected);
+    saveCornerCache(path, vio_dataset->get_cam_names(), this->calib_corners,
+                    this->calib_corners_rejected, this->dormant_corners);
 
     std::cout << "Done detecting corners. Saved them here: " << path
               << std::endl;
@@ -763,10 +764,8 @@ void CamCalib::initCamPoses() {
                             this->calib_corners, this->calib_init_poses);
 
   std::string path = cache_path + cache_dataset_name + "_init_poses.cereal";
-  std::ofstream os(path, std::ios::binary);
-  cereal::BinaryOutputArchive archive(os);
-
-  archive(this->calib_init_poses);
+  savePoseCache(path, vio_dataset->get_cam_names(), this->calib_init_poses,
+                this->dormant_poses);
 
   std::cout << "Done initial camera pose computation. Saved them here: " << path
             << std::endl;
@@ -965,12 +964,28 @@ void CamCalib::initOptimization() {
 
 void CamCalib::loadDataset() {
   basalt::DatasetIoInterfacePtr dataset_io =
-      basalt::DatasetIoFactory::getDatasetIo(dataset_type);
+      basalt::DatasetIoFactory::getDatasetIo(dataset_type, sensor_filter);
 
   dataset_io->read(dataset_path);
 
   vio_dataset = dataset_io->get_data();
-  setNumCameras(vio_dataset->get_num_cams());
+  const auto num_cams = vio_dataset->get_num_cams();
+  if (num_cams == 0) {
+    std::cerr << "Error: dataset contains no cameras. Check the --include / "
+                 "--exclude sensor filters."
+              << std::endl;
+    std::abort();
+  }
+  setNumCameras(num_cams);
+  if (cam_types.size() != num_cams) {
+    if (cam_types.size() > 1) {
+      std::cerr << "Error: size of list of provided camera types does not "
+                   "match the number of cameras in the dataset."
+                << std::endl;
+      std::abort();
+    }
+    cam_types.assign(num_cams, cam_types[0]);
+  }
 
   if (skip_images > 1 || start_image > 0 || end_image != 0) {
     std::vector<int64_t> new_image_timestamps;
@@ -991,31 +1006,30 @@ void CamCalib::loadDataset() {
     std::string path =
         cache_path + cache_dataset_name + "_detected_corners.cereal";
 
-    std::ifstream is(path, std::ios::binary);
+    const CacheLoadResult res = loadCornerCache(
+        path, vio_dataset->get_cam_names(), !sensor_filter.empty(),
+        calib_corners, calib_corners_rejected, dormant_corners);
 
-    if (is.good()) {
-      cereal::BinaryInputArchive archive(is);
-
-      calib_corners.clear();
-      calib_corners_rejected.clear();
-      archive(calib_corners);
-      archive(calib_corners_rejected);
-
+    if (res == CacheLoadResult::Loaded ||
+        res == CacheLoadResult::LoadedLegacy) {
       std::cout << "Loaded detected corners from: " << path << std::endl;
 
-      const size_t num_missing =
-          CalibHelper::getMissingCornerFrames(
-              vio_dataset->get_image_timestamps(), calib_corners)
-              .size();
+      size_t num_missing = 0;
+      for (const auto &kv : CalibHelper::getMissingCorners(
+               vio_dataset->get_image_timestamps(),
+               vio_dataset->get_num_cams(), calib_corners)) {
+        num_missing += kv.second.size();
+      }
       if (num_missing > 0) {
         std::cerr << "Warning: " << num_missing << " of "
-                  << vio_dataset->get_image_timestamps().size()
+                  << vio_dataset->get_image_timestamps().size() *
+                         vio_dataset->get_num_cams()
                   << " selected images have no corner data in the cache "
-                     "(created with different start/end/skip image options?). "
-                     "Press detect_corners to detect the missing frames."
+                     "(created with a different image or sensor selection?). "
+                     "Press detect_corners to detect the missing images."
                   << std::endl;
       }
-    } else {
+    } else if (res == CacheLoadResult::Missing) {
       std::cout << "No pre-processed detected corners found" << std::endl;
     }
   }
@@ -1024,16 +1038,14 @@ void CamCalib::loadDataset() {
   {
     std::string path = cache_path + cache_dataset_name + "_init_poses.cereal";
 
-    std::ifstream is(path, std::ios::binary);
+    const CacheLoadResult res =
+        loadPoseCache(path, vio_dataset->get_cam_names(),
+                      !sensor_filter.empty(), calib_init_poses, dormant_poses);
 
-    if (is.good()) {
-      cereal::BinaryInputArchive archive(is);
-
-      calib_init_poses.clear();
-      archive(calib_init_poses);
-
+    if (res == CacheLoadResult::Loaded ||
+        res == CacheLoadResult::LoadedLegacy) {
       std::cout << "Loaded initial poses from: " << path << std::endl;
-    } else {
+    } else if (res == CacheLoadResult::Missing) {
       std::cout << "No pre-processed initial poses found" << std::endl;
     }
   }
@@ -1301,13 +1313,16 @@ bool CamCalib::cornersComplete() const {
     return false;
   }
 
-  const size_t num_missing =
-      CalibHelper::getMissingCornerFrames(vio_dataset->get_image_timestamps(),
-                                          calib_corners)
-          .size();
+  size_t num_missing = 0;
+  for (const auto &kv : CalibHelper::getMissingCorners(
+           vio_dataset->get_image_timestamps(), vio_dataset->get_num_cams(),
+           calib_corners)) {
+    num_missing += kv.second.size();
+  }
   if (num_missing > 0) {
     std::cerr << "Corners are missing for " << num_missing << " of "
-              << vio_dataset->get_image_timestamps().size()
+              << vio_dataset->get_image_timestamps().size() *
+                     vio_dataset->get_num_cams()
               << " selected images. Press detect_corners first." << std::endl;
     return false;
   }

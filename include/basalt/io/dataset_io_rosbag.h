@@ -35,6 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef DATASET_IO_ROSBAG_H
 #define DATASET_IO_ROSBAG_H
 
+#include <algorithm>
 #include <cmath>
 #include <mutex>
 #include <optional>
@@ -62,6 +63,8 @@ class RosbagVioDataset : public VioDataset {
   std::mutex m;
 
   size_t num_cams;
+  std::vector<std::string> cam_topics;
+  std::string imu_topic;
 
   std::vector<int64_t> image_timestamps;
 
@@ -77,6 +80,7 @@ class RosbagVioDataset : public VioDataset {
   std::vector<int64_t> gt_timestamps;  // ordered gt timestamps
   Eigen::aligned_vector<Sophus::SE3d>
       gt_pose_data;  // TODO: change to eigen aligned
+  bool gt_position_only = false;
 
   int64_t mocap_to_imu_offset_ns;
 
@@ -84,6 +88,10 @@ class RosbagVioDataset : public VioDataset {
   ~RosbagVioDataset() {}
 
   size_t get_num_cams() const { return num_cams; }
+
+  std::vector<std::string> get_cam_names() const { return cam_topics; }
+
+  std::string get_imu_name() const { return imu_topic; }
 
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
   Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
@@ -95,6 +103,8 @@ class RosbagVioDataset : public VioDataset {
   const Eigen::aligned_vector<Sophus::SE3d> &get_gt_pose_data() const {
     return gt_pose_data;
   }
+
+  bool is_gt_position_only() const { return gt_position_only; }
 
   int64_t get_mocap_to_imu_offset_ns() const { return mocap_to_imu_offset_ns; }
 
@@ -163,7 +173,7 @@ class RosbagVioDataset : public VioDataset {
 
 class RosbagIO : public DatasetIoInterface {
  public:
-  RosbagIO() {}
+  using DatasetIoInterface::DatasetIoInterface;
 
   void read(const std::string &path) {
     if (!fs::exists(path))
@@ -181,43 +191,66 @@ class RosbagIO : public DatasetIoInterface {
         view.getConnections();
 
     std::set<std::string> cam_topics;
-    std::string imu_topic;
-    std::string mocap_topic;
-    std::string point_topic;
+    std::set<std::string> imu_topics;
+    std::set<std::string> mocap_topics;
+    std::set<std::string> point_topics;
+
+    std::vector<std::string> all_sensor_names;
 
     for (const rosbag::ConnectionInfo *info : connection_infos) {
-      //      if (info->topic.substr(0, 4) == std::string("/cam")) {
-      //        cam_topics.insert(info->topic);
-      //      } else if (info->topic.substr(0, 4) == std::string("/imu")) {
-      //        imu_topic = info->topic;
-      //      } else if (info->topic.substr(0, 5) == std::string("/vrpn") ||
-      //                 info->topic.substr(0, 6) == std::string("/vicon")) {
-      //        mocap_topic = info->topic;
-      //      }
-
       if (info->datatype == std::string("sensor_msgs/Image")) {
-        cam_topics.insert(info->topic);
-      } else if (info->datatype == std::string("sensor_msgs/Imu") &&
-                 info->topic.rfind("/fcu", 0) != 0) {
-        imu_topic = info->topic;
+        all_sensor_names.push_back(info->topic);
+        if (sensor_filter.keep(info->topic, SensorTypes::Camera))
+          cam_topics.insert(info->topic);
+      } else if (info->datatype == std::string("sensor_msgs/Imu")) {
+        all_sensor_names.push_back(info->topic);
+        if (sensor_filter.keep(info->topic, SensorTypes::Imu))
+          imu_topics.insert(info->topic);
       } else if (info->datatype ==
                      std::string("geometry_msgs/TransformStamped") ||
                  info->datatype == std::string("geometry_msgs/PoseStamped")) {
-        mocap_topic = info->topic;
+        all_sensor_names.push_back(info->topic);
+        if (sensor_filter.keep(info->topic, SensorTypes::GroundTruth))
+          mocap_topics.insert(info->topic);
       } else if (info->datatype == std::string("geometry_msgs/PointStamped")) {
-        point_topic = info->topic;
+        all_sensor_names.push_back(info->topic);
+        if (sensor_filter.keep(info->topic, SensorTypes::GroundTruth))
+          point_topics.insert(info->topic);
       }
     }
 
-    std::cout << "imu_topic: " << imu_topic << std::endl;
-    std::cout << "mocap_topic: " << mocap_topic << std::endl;
     std::cout << "cam_topics: ";
     for (const std::string &s : cam_topics) std::cout << s << " ";
+    std::cout << "\nimu_topics: ";
+    for (const std::string &s : imu_topics) std::cout << s << " ";
+    std::cout << "\nmocap_topics: ";
+    for (const std::string &s : mocap_topics) std::cout << s << " ";
+    std::cout << "\npoint_topics: ";
+    for (const std::string &s : point_topics) std::cout << s << " ";
     std::cout << std::endl;
+
+    // mocap poses and points both end up in the same ground-truth trajectory
+    std::set<std::string> gt_topics = mocap_topics;
+    gt_topics.insert(point_topics.begin(), point_topics.end());
+
+    sensor_filter.warn_unmatched(all_sensor_names);
+    abort_if_multiple_topics("IMU", imu_topics);
+    abort_if_multiple_topics("ground-truth (mocap pose / point)", gt_topics);
+
+    data->imu_topic = imu_topics.empty() ? std::string() : *imu_topics.begin();
+    data->gt_position_only = !point_topics.empty();
+
+    const std::string imu_topic =
+        imu_topics.empty() ? std::string() : *imu_topics.begin();
+    const std::string mocap_topic =
+        mocap_topics.empty() ? std::string() : *mocap_topics.begin();
+    const std::string point_topic =
+        point_topics.empty() ? std::string() : *point_topics.begin();
 
     std::map<std::string, int> topic_to_id;
     int idx = 0;
     for (const std::string &s : cam_topics) {
+      data->cam_topics.emplace_back(s);
       topic_to_id[s] = idx;
       idx++;
     }
@@ -255,9 +288,7 @@ class RosbagIO : public DatasetIoInterface {
 
         min_time = std::min(min_time, timestamp_ns);
         max_time = std::max(max_time, timestamp_ns);
-      }
-
-      if (imu_topic == topic) {
+      } else if (imu_topic == topic) {
         sensor_msgs::ImuConstPtr imu_msg = m.instantiate<sensor_msgs::Imu>();
         int64_t time = imu_msg->header.stamp.toNSec();
 
@@ -278,9 +309,7 @@ class RosbagIO : public DatasetIoInterface {
 
         int64_t msg_arrival_time = m.getTime().toNSec();
         system_to_imu_offset_vec.push_back(time - msg_arrival_time);
-      }
-
-      if (mocap_topic == topic) {
+      } else if (mocap_topic == topic) {
         geometry_msgs::TransformStampedConstPtr mocap_msg =
             m.instantiate<geometry_msgs::TransformStamped>();
 
@@ -309,9 +338,7 @@ class RosbagIO : public DatasetIoInterface {
 
         int64_t msg_arrival_time = m.getTime().toNSec();
         system_to_mocap_offset_vec.push_back(time - msg_arrival_time);
-      }
-
-      if (point_topic == topic) {
+      } else if (point_topic == topic) {
         geometry_msgs::PointStampedConstPtr mocap_msg =
             m.instantiate<geometry_msgs::PointStamped>();
 

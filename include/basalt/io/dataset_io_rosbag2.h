@@ -296,7 +296,8 @@ class Rosbag2VioDataset : public VioDataset {
   size_t num_cams;
 
   std::vector<int64_t> image_timestamps;
-  std::vector<std::string> cam_topic_by_id;
+  std::vector<std::string> cam_topics;
+  std::string imu_topic;
 
   // vector of images for every timestamp
   // assumes vectors size is num_cams for every timestamp with null pointers
@@ -309,6 +310,7 @@ class Rosbag2VioDataset : public VioDataset {
 
   std::vector<int64_t> gt_timestamps;  // ordered gt timestamps
   Eigen::aligned_vector<Sophus::SE3d> gt_pose_data;
+  bool gt_position_only = false;
 
   int64_t mocap_to_imu_offset_ns = 0;
 
@@ -316,6 +318,10 @@ class Rosbag2VioDataset : public VioDataset {
   ~Rosbag2VioDataset() {}
 
   size_t get_num_cams() const { return num_cams; }
+
+  std::vector<std::string> get_cam_names() const { return cam_topics; }
+
+  std::string get_imu_name() const { return imu_topic; }
 
   std::vector<int64_t>& get_image_timestamps() { return image_timestamps; }
   Eigen::aligned_vector<AccelData>& get_accel_data() { return accel_data; }
@@ -327,6 +333,8 @@ class Rosbag2VioDataset : public VioDataset {
   const Eigen::aligned_vector<Sophus::SE3d>& get_gt_pose_data() const {
     return gt_pose_data;
   }
+
+  bool is_gt_position_only() const { return gt_position_only; }
 
   int64_t get_mocap_to_imu_offset_ns() const { return mocap_to_imu_offset_ns; }
 
@@ -345,7 +353,7 @@ class Rosbag2VioDataset : public VioDataset {
 
         m.lock();
         std::vector<uint8_t> raw =
-            readers[ref.file_idx]->readMessage(cam_topic_by_id[i], ref.key);
+            readers[ref.file_idx]->readMessage(cam_topics[i], ref.key);
         m.unlock();
 
         ros2_msgs::Image img_msg =
@@ -395,7 +403,7 @@ class Rosbag2VioDataset : public VioDataset {
 
 class Rosbag2IO : public DatasetIoInterface {
  public:
-  Rosbag2IO() {}
+  using DatasetIoInterface::DatasetIoInterface;
 
   void read(const std::string& path) {
     if (!fs::exists(path))
@@ -409,41 +417,71 @@ class Rosbag2IO : public DatasetIoInterface {
     // get topics; message types are matched like in the ROS1 reader, but by
     // ROS2 type names (accepting both pkg/msg/Type and pkg/Type spellings)
     std::set<std::string> cam_topics;
-    std::string imu_topic;
-    std::string mocap_topic;
-    bool mocap_is_pose = false;
-    std::string point_topic;
+    std::set<std::string> imu_topics;
+    std::map<std::string, bool> mocap_topics;
+    std::set<std::string> point_topics;
+
+    std::vector<std::string> all_sensor_names;
 
     for (const auto& reader : data->readers) {
       for (const Ros2TopicInfo& info : reader->topics()) {
         const std::string type = normalizeTypeName(info.type);
 
         if (type == "sensor_msgs/Image") {
-          cam_topics.insert(info.name);
-        } else if (type == "sensor_msgs/Imu" &&
-                   info.name.rfind("/fcu", 0) != 0) {
-          imu_topic = info.name;
+          all_sensor_names.push_back(info.name);
+          if (sensor_filter.keep(info.name, SensorTypes::Camera))
+            cam_topics.insert(info.name);
+        } else if (type == "sensor_msgs/Imu") {
+          all_sensor_names.push_back(info.name);
+          if (sensor_filter.keep(info.name, SensorTypes::Imu))
+            imu_topics.insert(info.name);
         } else if (type == "geometry_msgs/TransformStamped" ||
                    type == "geometry_msgs/PoseStamped") {
-          mocap_topic = info.name;
-          mocap_is_pose = type == "geometry_msgs/PoseStamped";
+          all_sensor_names.push_back(info.name);
+          if (sensor_filter.keep(info.name, SensorTypes::GroundTruth))
+            mocap_topics[info.name] = type == "geometry_msgs/PoseStamped";
         } else if (type == "geometry_msgs/PointStamped") {
-          point_topic = info.name;
+          all_sensor_names.push_back(info.name);
+          if (sensor_filter.keep(info.name, SensorTypes::GroundTruth))
+            point_topics.insert(info.name);
         }
       }
     }
 
-    std::cout << "imu_topic: " << imu_topic << std::endl;
-    std::cout << "mocap_topic: " << mocap_topic << std::endl;
     std::cout << "cam_topics: ";
-    for (const std::string& s : cam_topics) std::cout << s << " ";
+    for (const std::string &s : cam_topics) std::cout << s << " ";
+    std::cout << "\nimu_topics: ";
+    for (const std::string &s : imu_topics) std::cout << s << " ";
+    std::cout << "\nmocap_topics: ";
+    for (const auto &[s, b] : mocap_topics) std::cout << s << " ";
+    std::cout << "\npoint_topics: ";
+    for (const std::string &s : point_topics) std::cout << s << " ";
     std::cout << std::endl;
+
+    std::set<std::string> gt_topics = point_topics;
+    for (const auto& kv : mocap_topics) gt_topics.insert(kv.first);
+
+    sensor_filter.warn_unmatched(all_sensor_names);
+    abort_if_multiple_topics("IMU", imu_topics);
+    abort_if_multiple_topics("ground-truth (mocap pose / point)", gt_topics);
+
+    data->imu_topic = imu_topics.empty() ? std::string() : *imu_topics.begin();
+    data->gt_position_only = !point_topics.empty();
+
+    const std::string imu_topic =
+        imu_topics.empty() ? std::string() : *imu_topics.begin();
+    const std::string mocap_topic =
+        mocap_topics.empty() ? std::string() : mocap_topics.begin()->first;
+    const bool mocap_is_pose =
+        mocap_topics.empty() ? false : mocap_topics.begin()->second;
+    const std::string point_topic =
+        point_topics.empty() ? std::string() : *point_topics.begin();
 
     std::map<std::string, int> topic_to_id;
     int idx = 0;
     for (const std::string& s : cam_topics) {
       topic_to_id[s] = idx;
-      data->cam_topic_by_id.push_back(s);
+      data->cam_topics.push_back(s);
       idx++;
     }
 
@@ -484,9 +522,7 @@ class Rosbag2IO : public DatasetIoInterface {
 
           min_time = std::min(min_time, timestamp_ns);
           max_time = std::max(max_time, timestamp_ns);
-        }
-
-        if (imu_topic == topic) {
+        } else if (imu_topic == topic) {
           ros2_msgs::Imu imu_msg = ros2_msgs::decode<ros2_msgs::Imu>(msg, size);
           int64_t time = imu_msg.header.stamp.toNSec();
 
@@ -506,9 +542,7 @@ class Rosbag2IO : public DatasetIoInterface {
           max_time = std::max(max_time, time);
 
           system_to_imu_offset_vec.push_back(time - recv_t_ns);
-        }
-
-        if (mocap_topic == topic) {
+        } else if (mocap_topic == topic) {
           ros2_msgs::TransformStamped mocap_msg;
 
           if (mocap_is_pose) {
@@ -530,9 +564,7 @@ class Rosbag2IO : public DatasetIoInterface {
           mocap_msgs.push_back(mocap_msg);
 
           system_to_mocap_offset_vec.push_back(time - recv_t_ns);
-        }
-
-        if (point_topic == topic) {
+        } else if (point_topic == topic) {
           ros2_msgs::PointStamped point_msg =
               ros2_msgs::decode<ros2_msgs::PointStamped>(msg, size);
 

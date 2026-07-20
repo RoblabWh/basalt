@@ -21,6 +21,14 @@ int main(int argc, char **argv) {
   app.add_option("--cache-name", opts.cache_dataset_name,
                  "Name to save cached files");
 
+  app.add_option("--include", opts.sensor_include,
+                 "Only use sensors matching one of these glob patterns")
+      ->delimiter(',');
+  app.add_option("--exclude", opts.sensor_exclude,
+                 "Exclude sensors matching one of these glob patterns; "
+                 "applied after --include")
+      ->delimiter(',');
+
   app.add_option("--wn-min", opts.wn_min, "Start of interval for white noise");
   app.add_option("--wn-max", opts.wn_max, "End of interval for white noise");
   app.add_option("--rr-min", opts.rr_min, "Start of interval for random walk");

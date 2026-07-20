@@ -153,6 +153,9 @@ int main(int argc, char** argv) {
   std::string dataset_type;
   std::string config_path;
 
+  basalt::SensorFilter sensor_filter;
+  sensor_filter.types = basalt::SensorTypes::Camera;
+
   CLI::App app{"App description"};
 
   app.add_option("--show-gui", show_gui, "Show GUI");
@@ -168,6 +171,14 @@ int main(int argc, char** argv) {
 
   app.add_option("--config-path", config_path, "Path to config file.");
 
+  app.add_option("--include", sensor_filter.include,
+                 "Only use sensors matching one of these glob patterns")
+      ->delimiter(',');
+  app.add_option("--exclude", sensor_filter.exclude,
+                 "Exclude sensors matching one of these glob patterns; "
+                 "applied after --include")
+      ->delimiter(',');
+
   try {
     app.parse(argc, argv);
   } catch (const CLI::ParseError& e) {
@@ -182,7 +193,7 @@ int main(int argc, char** argv) {
 
   {
     basalt::DatasetIoInterfacePtr dataset_io =
-        basalt::DatasetIoFactory::getDatasetIo(dataset_type);
+        basalt::DatasetIoFactory::getDatasetIo(dataset_type, sensor_filter);
 
     dataset_io->read(dataset_path);
 

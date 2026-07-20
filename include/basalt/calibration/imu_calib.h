@@ -21,6 +21,8 @@ struct ImuCalibOptions {
   std::string dataset_type;
   std::string cache_path;
   std::string cache_dataset_name;
+  std::vector<std::string> sensor_include;
+  std::vector<std::string> sensor_exclude;
   // Default values from https://github.com/ori-drs/allan_variance_ros
   double wn_min = 0.1;
   double wn_max = 10.;
@@ -56,6 +58,8 @@ class ImuCalib {
   void drawPlots();
 
  private:
+  std::string allanCachePath(bool legacy = false) const;
+
   static constexpr int UI_WIDTH = 300;
 
   VioDatasetPtr vio_dataset;
@@ -66,8 +70,12 @@ class ImuCalib {
   std::string dataset_path;
   std::string dataset_type;
 
+  SensorFilter sensor_filter;
+
   std::string cache_path;
   std::string cache_dataset_name;
+
+  std::string imu_name;
 
   std::shared_ptr<AllanDeviations> allan_deviations;
 

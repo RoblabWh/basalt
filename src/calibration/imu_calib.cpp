@@ -8,6 +8,8 @@
 
 #include <basalt/calibration/allan_variance.h>
 
+#include <cctype>
+
 namespace basalt {
 
 const uint64_t LOG_DATAPOINTS = 10000;
@@ -15,6 +17,8 @@ const uint64_t LOG_DATAPOINTS = 10000;
 ImuCalib::ImuCalib(const ImuCalibOptions &options)
     : dataset_path(options.dataset_path),
       dataset_type(options.dataset_type),
+      sensor_filter{options.sensor_include, options.sensor_exclude,
+                    SensorTypes::Imu},
       cache_path(ensure_trailing_slash(options.cache_path)),
       cache_dataset_name(options.cache_dataset_name),
       period_min(options.period_min),
@@ -98,21 +102,57 @@ int ImuCalib::runHeadless() {
   return 0;
 }
 
+std::string ImuCalib::allanCachePath(bool legacy) const {
+  std::string suffix;
+  if (!legacy && !imu_name.empty()) {
+    std::string sanitized = imu_name;
+    for (char &chr : sanitized) {
+      if (std::isalnum(static_cast<unsigned char>(chr)) == 0 && chr != '.' &&
+          chr != '_' && chr != '-') {
+        chr = '_';
+      }
+    }
+    sanitized.erase(0, std::min(sanitized.find_first_not_of('_'),
+                                sanitized.size() - 1));
+    suffix = "_" + sanitized;
+  }
+  return cache_path + cache_dataset_name + suffix + "_allan_deviations_tau_" +
+         std::to_string(period_min) + ".cereal";
+}
+
 void ImuCalib::loadDataset() {
   basalt::DatasetIoInterfacePtr dataset_io =
-      basalt::DatasetIoFactory::getDatasetIo(dataset_type);
+      basalt::DatasetIoFactory::getDatasetIo(dataset_type, sensor_filter);
 
   dataset_io->read(dataset_path);
 
   vio_dataset = dataset_io->get_data();
 
+  imu_name = vio_dataset->get_imu_name();
+
+  if (vio_dataset->get_accel_data().empty() ||
+      vio_dataset->get_gyro_data().empty()) {
+    std::cerr << "Error: dataset contains no IMU data. Does the dataset have "
+                 "an IMU, and does a pattern match it?"
+              << std::endl;
+    std::abort();
+  }
+
   // load allan deviations if they exist
   {
-    std::string path = cache_path + cache_dataset_name +
-                       "_allan_deviations_tau_" + std::to_string(period_min) +
-                       ".cereal";
+    std::string path = allanCachePath();
 
     std::ifstream is(path, std::ios::binary);
+
+    // Reuse old caches without IMU name in the file name if the cache is unambiguous.
+    if (!is.good() && !imu_name.empty() && sensor_filter.empty()) {
+      const std::string legacy_path = allanCachePath(true);
+      is.open(legacy_path, std::ios::binary);
+      if (is.good()) {
+        std::cout << "Reusing legacy allan-deviation cache: " << legacy_path << std::endl;
+        path = legacy_path;
+      }
+    }
 
     if (is.good()) {
       cereal::BinaryInputArchive archive(is);
@@ -186,9 +226,7 @@ void ImuCalib::compute() {
                                allan_deviations->deviations.cols()) {
     allan_deviations = new_allan_deviations;
 
-    std::string path = cache_path + cache_dataset_name +
-                       "_allan_deviations_tau_" + std::to_string(period_min) +
-                       ".cereal";
+    std::string path = allanCachePath();
     std::ofstream os(path, std::ios::binary);
     cereal::BinaryOutputArchive archive(os);
 

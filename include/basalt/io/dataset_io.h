@@ -35,10 +35,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
+#include <fnmatch.h>
+
 #include <array>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -110,11 +115,82 @@ struct AprilgridCornersData {
   std::vector<int> corner_id;
 };
 
+enum class SensorTypes : uint8_t {
+  None = 0,
+  Camera = 1U << 0,
+  Imu = 1U << 1,
+  GroundTruth = 1U << 2,  // mocap pose + point
+  All = Camera | Imu | GroundTruth,
+};
+
+constexpr SensorTypes operator|(SensorTypes lhs, SensorTypes rhs) {
+  return static_cast<SensorTypes>(static_cast<uint8_t>(lhs) |
+                                  static_cast<uint8_t>(rhs));
+}
+constexpr SensorTypes operator&(SensorTypes lhs, SensorTypes rhs) {
+  return static_cast<SensorTypes>(static_cast<uint8_t>(lhs) &
+                                  static_cast<uint8_t>(rhs));
+}
+constexpr bool any(SensorTypes types) { return types != SensorTypes::None; }
+
+struct SensorFilter {
+  std::vector<std::string> include;      // glob patterns; empty = keep everything
+  std::vector<std::string> exclude;      // applied after include
+  SensorTypes types = SensorTypes::All;  // which sensor kinds to load
+
+  bool empty() const { return include.empty() && exclude.empty(); }
+
+  bool wants(SensorTypes type) const { return any(types & type); }
+
+  bool keep(const std::string &name) const {
+    if (!include.empty() && !matches_any(include, name)) return false;
+    return !matches_any(exclude, name);
+  }
+
+  bool keep(const std::string &name, SensorTypes type) const {
+    return wants(type) && keep(name);
+  }
+
+  // Warn about patterns that match none of the dataset's sensor names.
+  void warn_unmatched(const std::vector<std::string> &names) const {
+    for (const auto *patterns : {&include, &exclude}) {
+      for (const std::string &p : *patterns) {
+        bool hit = false;
+        for (const std::string &n : names) hit = hit || match(p, n);
+        if (!hit) {
+          std::cerr << "Warning: sensor filter pattern '" << p
+                    << "' does not match any sensor. Available sensors:";
+          for (const std::string &n : names) std::cerr << " " << n;
+          std::cerr << std::endl;
+        }
+      }
+    }
+  }
+
+ private:
+  static bool match(const std::string &pattern, const std::string &name) {
+    return fnmatch(pattern.c_str(), name.c_str(), 0) == 0;
+  }
+
+  static bool matches_any(const std::vector<std::string> &patterns,
+                          const std::string &name) {
+    for (const std::string &p : patterns)
+      if (match(p, name)) return true;
+    return false;
+  }
+};
+
 class VioDataset {
  public:
   virtual ~VioDataset() {};
 
   virtual size_t get_num_cams() const = 0;
+
+  // Stable per-camera names, index-aligned with get_image_data()
+  virtual std::vector<std::string> get_cam_names() const = 0;
+
+  // Name of the IMU sensor, might be empty for single-IMU datasets
+  virtual std::string get_imu_name() const { return {}; }
 
   virtual std::vector<int64_t> &get_image_timestamps() = 0;
   virtual Eigen::aligned_vector<AccelData> &get_accel_data() = 0;
@@ -123,6 +199,9 @@ class VioDataset {
   virtual const std::vector<int64_t> &get_gt_timestamps() const = 0;
   virtual const Eigen::aligned_vector<Sophus::SE3d> &get_gt_pose_data()
       const = 0;
+
+  // True when the ground truth carries only positions with orientation set to identity
+  virtual bool is_gt_position_only() const { return false; }
   virtual int64_t get_mocap_to_imu_offset_ns() const = 0;
   virtual std::vector<ImageData> get_image_data(int64_t t_ns) = 0;
 
@@ -131,13 +210,27 @@ class VioDataset {
 
 typedef std::shared_ptr<VioDataset> VioDatasetPtr;
 
+inline void abort_if_multiple_topics(const std::string &what,
+                                     const std::set<std::string> &topics) {
+  if (topics.size() <= 1) return;
+  std::cerr << "Error: multiple " << what << " sensors selected:";
+  for (const std::string &t : topics) std::cerr << " " << t;
+  std::cerr << "\nSelect a single one with the sensor filter" << std::endl;
+  std::abort();
+}
+
 class DatasetIoInterface {
  public:
+  explicit DatasetIoInterface(SensorFilter sensor_filter)
+      : sensor_filter{std::move(sensor_filter)} {}
   virtual void read(const std::string &path) = 0;
   virtual void reset() = 0;
   virtual VioDatasetPtr get_data() = 0;
 
   virtual ~DatasetIoInterface() {};
+
+ protected:
+  SensorFilter sensor_filter;
 };
 
 typedef std::shared_ptr<DatasetIoInterface> DatasetIoInterfacePtr;
@@ -145,7 +238,7 @@ typedef std::shared_ptr<DatasetIoInterface> DatasetIoInterfacePtr;
 class DatasetIoFactory {
  public:
   static DatasetIoInterfacePtr getDatasetIo(const std::string &dataset_type,
-                                            bool load_mocap_as_gt = false);
+                                            SensorFilter sensor_filter = {});
 };
 
 }  // namespace basalt

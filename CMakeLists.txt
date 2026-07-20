@@ -302,6 +302,7 @@ target_sources(basalt
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/allan_variance.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/aprilgrid.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/calib_cache.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/calibration_helper.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/cam_calib.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/basalt/calibration/cam_imu_calib.h
@@ -367,6 +368,7 @@ target_sources(basalt
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/allan_variance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/aprilgrid.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/calib_cache.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/calibraiton_helper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/response.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration/vignette.cpp

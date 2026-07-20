@@ -49,6 +49,7 @@ namespace basalt {
 CamImuCalib::CamImuCalib(const CamImuCalibOptions &options)
     : dataset_path(options.dataset_path),
       dataset_type(options.dataset_type),
+      sensor_filter{options.sensor_include, options.sensor_exclude},
       april_grid(options.aprilgrid_path),
       cache_path(ensure_trailing_slash(options.cache_path)),
       cache_dataset_name(options.cache_dataset_name),
@@ -205,7 +206,7 @@ int CamImuCalib::runHeadless(int max_iterations, bool save_mocap) {
     return 1;
   }
 
-  if (!hasCorners()) {
+  if (!cornersComplete()) {
     detectCorners();
   }
   if (!hasCorners()) {
@@ -296,11 +297,8 @@ void CamImuCalib::detectCorners() {
 
     std::string path =
         cache_path + cache_dataset_name + "_detected_corners.cereal";
-    std::ofstream os(path, std::ios::binary);
-    cereal::BinaryOutputArchive archive(os);
-
-    archive(this->calib_corners);
-    archive(this->calib_corners_rejected);
+    saveCornerCache(path, vio_dataset->get_cam_names(), this->calib_corners,
+                    this->calib_corners_rejected, this->dormant_corners);
 
     std::cout << "Done detecting corners. Saved them here: " << path
               << std::endl;
@@ -334,10 +332,8 @@ void CamImuCalib::initCamPoses() {
                               this->calib_corners, this->calib_init_poses);
 
     std::string path = cache_path + cache_dataset_name + "_init_poses.cereal";
-    std::ofstream os(path, std::ios::binary);
-    cereal::BinaryOutputArchive archive(os);
-
-    archive(this->calib_init_poses);
+    savePoseCache(path, vio_dataset->get_cam_names(), this->calib_init_poses,
+                  this->dormant_poses);
 
     std::cout << "Done initial camera pose computation. Saved them here: "
               << path << std::endl;
@@ -478,9 +474,16 @@ void CamImuCalib::initOptimization() {
                                          kv.second.corner_ids);
   }
 
-  for (size_t i = 0; i < vio_dataset->get_gt_timestamps().size(); i++) {
-    calib_opt->addMocapMeasurement(vio_dataset->get_gt_timestamps()[i],
-                                   vio_dataset->get_gt_pose_data()[i]);
+  if (vio_dataset->is_gt_position_only()) {
+    std::cerr << "Warning: the ground truth contains only positions, but the "
+                 "mocap calibration needs full poses. Not adding mocap "
+                 "measurements."
+              << std::endl;
+  } else {
+    for (size_t i = 0; i < vio_dataset->get_gt_timestamps().size(); i++) {
+      calib_opt->addMocapMeasurement(vio_dataset->get_gt_timestamps()[i],
+                                     vio_dataset->get_gt_pose_data()[i]);
+    }
   }
 
   bool g_initialized = false;
@@ -549,6 +552,13 @@ void CamImuCalib::initMocap() {
 
   if (vio_dataset->get_gt_timestamps().empty()) {
     std::cerr << "The dataset contains no Mocap data!" << std::endl;
+    return;
+  }
+
+  if (vio_dataset->is_gt_position_only()) {
+    std::cerr << "Error: the ground truth contains only positions, but the "
+                 "mocap initialization needs full poses!"
+              << std::endl;
     return;
   }
 
@@ -651,11 +661,27 @@ void CamImuCalib::initMocap() {
 
 void CamImuCalib::loadDataset() {
   basalt::DatasetIoInterfacePtr dataset_io =
-      basalt::DatasetIoFactory::getDatasetIo(dataset_type);
+      basalt::DatasetIoFactory::getDatasetIo(dataset_type, sensor_filter);
 
   dataset_io->read(dataset_path);
 
   vio_dataset = dataset_io->get_data();
+
+  if (vio_dataset->get_num_cams() == 0) {
+    std::cerr << "Error: dataset contains no cameras. Check the --include / "
+                 "--exclude sensor filters."
+              << std::endl;
+    std::abort();
+  }
+
+  if (vio_dataset->get_accel_data().empty() ||
+      vio_dataset->get_gyro_data().empty()) {
+    std::cerr << "Error: dataset contains no IMU data. Was the IMU removed "
+                 "by the --include / --exclude sensor filters?"
+              << std::endl;
+    std::abort();
+  }
+
   setNumCameras(vio_dataset->get_num_cams());
 
   if (skip_images > 1 || start_image > 0 || end_image != 0) {
@@ -719,31 +745,30 @@ void CamImuCalib::loadDataset() {
     std::string path =
         cache_path + cache_dataset_name + "_detected_corners.cereal";
 
-    std::ifstream is(path, std::ios::binary);
+    const CacheLoadResult res = loadCornerCache(
+        path, vio_dataset->get_cam_names(), !sensor_filter.empty(),
+        calib_corners, calib_corners_rejected, dormant_corners);
 
-    if (is.good()) {
-      cereal::BinaryInputArchive archive(is);
-
-      calib_corners.clear();
-      calib_corners_rejected.clear();
-      archive(calib_corners);
-      archive(calib_corners_rejected);
-
+    if (res == CacheLoadResult::Loaded ||
+        res == CacheLoadResult::LoadedLegacy) {
       std::cout << "Loaded detected corners from: " << path << std::endl;
 
-      const size_t num_missing =
-          CalibHelper::getMissingCornerFrames(
-              vio_dataset->get_image_timestamps(), calib_corners)
-              .size();
+      size_t num_missing = 0;
+      for (const auto &kv : CalibHelper::getMissingCorners(
+               vio_dataset->get_image_timestamps(),
+               vio_dataset->get_num_cams(), calib_corners)) {
+        num_missing += kv.second.size();
+      }
       if (num_missing > 0) {
         std::cerr << "Warning: " << num_missing << " of "
-                  << vio_dataset->get_image_timestamps().size()
+                  << vio_dataset->get_image_timestamps().size() *
+                         vio_dataset->get_num_cams()
                   << " selected images have no corner data in the cache "
-                     "(created with different start/end/skip image options?). "
-                     "Press detect_corners to detect the missing frames."
+                     "(created with a different image or sensor selection?). "
+                     "Press detect_corners to detect the missing images."
                   << std::endl;
       }
-    } else {
+    } else if (res == CacheLoadResult::Missing) {
       std::cout << "No pre-processed detected corners found" << std::endl;
     }
   }
@@ -752,16 +777,14 @@ void CamImuCalib::loadDataset() {
   {
     std::string path = cache_path + cache_dataset_name + "_init_poses.cereal";
 
-    std::ifstream is(path, std::ios::binary);
+    const CacheLoadResult res =
+        loadPoseCache(path, vio_dataset->get_cam_names(),
+                      !sensor_filter.empty(), calib_init_poses, dormant_poses);
 
-    if (is.good()) {
-      cereal::BinaryInputArchive archive(is);
-
-      calib_init_poses.clear();
-      archive(calib_init_poses);
-
+    if (res == CacheLoadResult::Loaded ||
+        res == CacheLoadResult::LoadedLegacy) {
       std::cout << "Loaded initial poses from: " << path << std::endl;
-    } else {
+    } else if (res == CacheLoadResult::Missing) {
       std::cout << "No pre-processed initial poses found" << std::endl;
     }
   }
@@ -1302,13 +1325,16 @@ bool CamImuCalib::cornersComplete() const {
     return false;
   }
 
-  const size_t num_missing =
-      CalibHelper::getMissingCornerFrames(vio_dataset->get_image_timestamps(),
-                                          calib_corners)
-          .size();
+  size_t num_missing = 0;
+  for (const auto &kv : CalibHelper::getMissingCorners(
+           vio_dataset->get_image_timestamps(), vio_dataset->get_num_cams(),
+           calib_corners)) {
+    num_missing += kv.second.size();
+  }
   if (num_missing > 0) {
     std::cerr << "Corners are missing for " << num_missing << " of "
-              << vio_dataset->get_image_timestamps().size()
+              << vio_dataset->get_image_timestamps().size() *
+                     vio_dataset->get_num_cams()
               << " selected images. Press detect_corners first." << std::endl;
     return false;
   }

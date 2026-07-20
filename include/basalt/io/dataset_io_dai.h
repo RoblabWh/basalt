@@ -10,6 +10,7 @@
 namespace basalt {
 
 struct CameraMetadata {
+  std::string name;
   fs::path basepath;
   std::vector<int64_t> timestamps;  // ns
   std::unordered_map<int64_t, fs::path> filenames;
@@ -41,6 +42,13 @@ class DaiVioDataset : public VioDataset {
   ~DaiVioDataset() {};
 
   size_t get_num_cams() const { return cam_meta.size(); }
+
+  std::vector<std::string> get_cam_names() const {
+    std::vector<std::string> names;
+    names.reserve(cam_meta.size());
+    for (const CameraMetadata &cam : cam_meta) names.push_back(cam.name);
+    return names;
+  }
 
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
   Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
@@ -115,7 +123,7 @@ class DaiVioDataset : public VioDataset {
 
 class DaiIO : public DatasetIoInterface {
  public:
-  DaiIO(bool load_mocap_as_gt) : load_mocap_as_gt(load_mocap_as_gt) {}
+  using DatasetIoInterface::DatasetIoInterface;
 
   void read(const std::string &path) {
     data.reset(new DaiVioDataset);
@@ -126,6 +134,7 @@ class DaiIO : public DatasetIoInterface {
       return;
     }
 
+    std::vector<std::string> all_sensor_names;
     std::vector<fs::path> metadata_paths;
     const auto cams_path = root / "cams";
     if (fs::is_directory(cams_path)) {
@@ -133,7 +142,9 @@ class DaiIO : public DatasetIoInterface {
         const auto cam_path = cams_path / entry.path();
         if (cam_path.extension() == ".csv" &&
             fs::is_directory(cams_path / cam_path.stem())) {
-          metadata_paths.push_back(cam_path);
+          all_sensor_names.push_back(cam_path.stem().string());
+          if (sensor_filter.keep(cam_path.stem().string(), SensorTypes::Camera))
+            metadata_paths.push_back(cam_path);
         }
       }
     }
@@ -147,15 +158,12 @@ class DaiIO : public DatasetIoInterface {
         std::vector<int64_t>(timestamps.begin(), timestamps.end());
 
     const auto imu_path = root / "imu.csv";
-    if (fs::is_regular_file(imu_path)) read_imu_data(imu_path);
+    if (fs::is_regular_file(imu_path)) {
+      all_sensor_names.push_back("imu");
+      if (sensor_filter.keep("imu", SensorTypes::Imu)) read_imu_data(imu_path);
+    }
 
-    // TODO test
-    const auto mocap_path = root / "mocap.csv";
-    const auto gt_path = root / "gt.csv";
-    if (load_mocap_as_gt && fs::is_regular_file(mocap_path))
-      read_gt_pose_data(mocap_path);
-    else if (fs::is_regular_file(gt_path))
-      read_gt_state_data(gt_path);
+    sensor_filter.warn_unmatched(all_sensor_names);
   }
 
   void reset() { data.reset(); }
@@ -167,6 +175,7 @@ class DaiIO : public DatasetIoInterface {
                             std::set<int64_t> &timestamps) {
     std::ifstream f(path);
     auto &cam_meta = data->cam_meta.emplace_back();
+    cam_meta.name = path.stem().string();
     cam_meta.basepath = path.parent_path() / path.stem();
     std::string line;
     while (std::getline(f, line)) {
@@ -213,55 +222,7 @@ class DaiIO : public DatasetIoInterface {
     }
   }
 
-  // TODO test
-  void read_gt_state_data(const fs::path &path) {
-    std::ifstream f(path);
-    std::string line;
-    while (std::getline(f, line)) {
-      if (line[0] == '#') continue;
-
-      std::stringstream ss(line);
-
-      char tmp;
-      uint64_t timestamp;
-      Eigen::Quaterniond q;
-      Eigen::Vector3d pos, vel, accel_bias, gyro_bias;
-
-      ss >> timestamp >> tmp >> pos[0] >> tmp >> pos[1] >> tmp >> pos[2] >>
-          tmp >> q.w() >> tmp >> q.x() >> tmp >> q.y() >> tmp >> q.z() >> tmp >>
-          vel[0] >> tmp >> vel[1] >> tmp >> vel[2] >> tmp >> accel_bias[0] >>
-          tmp >> accel_bias[1] >> tmp >> accel_bias[2] >> tmp >> gyro_bias[0] >>
-          tmp >> gyro_bias[1] >> tmp >> gyro_bias[2];
-
-      data->gt_timestamps.emplace_back(timestamp);
-      data->gt_pose_data.emplace_back(q, pos);
-    }
-  }
-
-  // TODO test
-  void read_gt_pose_data(const fs::path &path) {
-    std::ifstream f(path);
-    std::string line;
-    while (std::getline(f, line)) {
-      if (line[0] == '#') continue;
-
-      std::stringstream ss(line);
-
-      char tmp;
-      uint64_t timestamp;
-      Eigen::Quaterniond q;
-      Eigen::Vector3d pos;
-
-      ss >> timestamp >> tmp >> pos[0] >> tmp >> pos[1] >> tmp >> pos[2] >>
-          tmp >> q.w() >> tmp >> q.x() >> tmp >> q.y() >> tmp >> q.z();
-
-      data->gt_timestamps.emplace_back(timestamp);
-      data->gt_pose_data.emplace_back(q, pos);
-    }
-  }
-
   std::shared_ptr<DaiVioDataset> data;
-  bool load_mocap_as_gt;
 };  // namespace basalt
 
 }  // namespace basalt
