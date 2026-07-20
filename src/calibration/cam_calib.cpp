@@ -748,10 +748,16 @@ void CamCalib::initCamIntrinsics() {
       if (success) {
         cam_initialized[j] = true;
 
-        std::cout << "Initialized camera " << j
-                  << " with pinhole model. You should set pinhole model for "
-                     "this camera!"
-                  << std::endl;
+        const std::string &model = calib_opt->calib->intrinsics[j].getName();
+        if (model == "pinhole" || model == "pinhole-radtan8") {
+          std::cout << "Initialized camera " << j << " with pinhole model."
+                    << std::endl;
+        } else {
+          std::cout << "Warning: wide-FOV init failed for camera " << j
+                    << ". Used a rough pinhole fallback, init may be poor. "
+                       "Verify the camera model or collect more views."
+                    << std::endl;
+        }
         calib_opt->calib->intrinsics[j].setFromInit(init_intr);
       }
     }
