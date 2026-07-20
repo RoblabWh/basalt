@@ -984,9 +984,12 @@ void CamImuCalib::saveMocapCalib() {
 }
 
 void CamImuCalib::drawImageOverlay(pangolin::View &v, size_t cam_id) {
-  UNUSED(v);
-
   size_t frame_id = show_frame;
+
+  const float text_x = v.v.l + 5;
+  const auto text_y = [&](int line) { return v.v.t() - 20 * line; };
+
+  v.v.Scissor();
 
   if (vio_dataset && frame_id < vio_dataset->get_image_timestamps().size()) {
     int64_t timestamp_ns = vio_dataset->get_image_timestamps()[frame_id];
@@ -1016,7 +1019,7 @@ void CamImuCalib::drawImageOverlay(pangolin::View &v, size_t cam_id) {
         pangolin::GlFont::I()
             .Text("Detected %d corners (%d rejected)", cr.corners.size(),
                   cr_rej.corners.size())
-            .Draw(5, 50);
+            .DrawWindow(text_x, text_y(1));
 
         if (show_corners_rejected) {
           glColor3f(1.0, 0.5, 0.0);
@@ -1038,7 +1041,9 @@ void CamImuCalib::drawImageOverlay(pangolin::View &v, size_t cam_id) {
       } else {
         glLineWidth(1.0);
 
-        pangolin::GlFont::I().Text("Corners not processed").Draw(5, 50);
+        pangolin::GlFont::I()
+            .Text("Corners not processed")
+            .DrawWindow(text_x, text_y(1));
       }
     }
 
@@ -1060,10 +1065,12 @@ void CamImuCalib::drawImageOverlay(pangolin::View &v, size_t cam_id) {
 
         pangolin::GlFont::I()
             .Text("Initial pose with %d inliers", cr.num_inliers)
-            .Draw(5, 100);
+            .DrawWindow(text_x, text_y(2));
 
       } else {
-        pangolin::GlFont::I().Text("Initial pose not processed").Draw(5, 100);
+        pangolin::GlFont::I()
+            .Text("Initial pose not processed")
+            .DrawWindow(text_x, text_y(2));
       }
     }
 
@@ -1087,11 +1094,19 @@ void CamImuCalib::drawImageOverlay(pangolin::View &v, size_t cam_id) {
             if (show_ids) pangolin::GlFont::I().Text("%d", i).Draw(c[0], c[1]);
           }
         } else {
-          pangolin::GlFont::I().Text("Too few corners detected.").Draw(5, 150);
+          pangolin::GlFont::I()
+              .Text("Too few corners detected.")
+              .DrawWindow(text_x, text_y(3));
         }
+      } else if (!reprojected_corners.empty()) {
+        pangolin::GlFont::I()
+            .Text("Initial pose estimation failed.")
+            .DrawWindow(text_x, text_y(3));
       }
     }
   }
+
+  pangolin::Viewport::DisableScissor();
 }
 
 void CamImuCalib::recomputeDataLog() {
