@@ -72,6 +72,12 @@ int main(int argc, char **argv) {
   app.add_option("--cache-name", opts.cache_dataset_name,
                  "Name to save cached files");
 
+  app.add_option("--cam-types", opts.cam_types,
+                 "Optional: expected camera types (eucm, ds, kb4, pinhole). "
+                 "If set, they are checked against the models in the loaded "
+                 "calibration.json; allows reusing the camera-calibration "
+                 "command line unchanged.");
+
   app.add_option("--include", opts.sensor_include,
                  "Only use sensors matching one of these glob patterns")
       ->delimiter(',');

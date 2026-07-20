@@ -160,6 +160,8 @@ class CamImuCalib {
   std::string cache_path;
   std::string cache_dataset_name;
 
+  std::vector<std::string> expected_cam_types;
+
   int skip_images;
   int start_image;
   int end_image;

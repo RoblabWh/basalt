@@ -126,6 +126,8 @@ The command line options for the IMU noise are continuous-time and defined as in
 
 **NOTE:** These options provide default values and will be overridden by any noise parameters present in the `calibration.json` from previous IMU or VI calibrations.
 
+`--cam-types` is accepted as an optional argument. The camera models themselves are taken from the `calibration.json` in the result folder, if `--cam-types` is set, it is checked against those models and the calibration aborts on a mismatch.
+
 ![calibration_vi](/doc/img/calibration_vi.png)
 
 The buttons in the GUI are located in the order you need to follow to calibrate the camera-IMU setup:

@@ -53,6 +53,7 @@ CamImuCalib::CamImuCalib(const CamImuCalibOptions &options)
       april_grid(options.aprilgrid_path),
       cache_path(ensure_trailing_slash(options.cache_path)),
       cache_dataset_name(options.cache_dataset_name),
+      expected_cam_types(options.cam_types),
       skip_images(options.skip_images),
       start_image(options.start_image),
       end_image(options.end_image),
@@ -805,6 +806,35 @@ void CamImuCalib::loadDataset() {
         std::cout << "No IMU calibration found, using defaults" << std::endl;
       } else {
         std::cout << "Found IMU calibration" << std::endl;
+      }
+
+      if (!expected_cam_types.empty()) {
+        const auto &intrinsics = calib_opt->calib->intrinsics;
+
+        std::vector<std::string> expected = expected_cam_types;
+        if (expected.size() != intrinsics.size()) {
+          if (expected.size() > 1) {
+            std::cerr << "Error: size of list of provided camera types ("
+                      << expected.size()
+                      << ") does not match the number of cameras in the "
+                         "loaded calibration ("
+                      << intrinsics.size() << ")." << std::endl;
+            std::abort();
+          }
+          expected.assign(intrinsics.size(), expected[0]);
+        }
+
+        bool mismatch = false;
+        for (size_t i = 0; i < intrinsics.size(); i++) {
+          if (intrinsics[i].getName() != expected[i]) {
+            std::cerr << "Error: --cam-types mismatch for cam" << i
+                      << ": expected '" << expected[i]
+                      << "' but calibration.json has '"
+                      << intrinsics[i].getName() << "'" << std::endl;
+            mismatch = true;
+          }
+        }
+        if (mismatch) std::abort();
       }
     }
   }
