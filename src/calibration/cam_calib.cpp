@@ -425,6 +425,16 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
   }
 
   initCamExtrinsics();
+  for (size_t j = 0; j < extrinsics_initialized.size(); j++) {
+    if (!extrinsics_initialized[j]) {
+      std::cerr << "Failed to initialize extrinsics for camera " << j
+                << ". Optimizing it from identity extrinsics would corrupt "
+                   "the whole calibration, aborting."
+                << std::endl;
+      return 1;
+    }
+  }
+
   initOptimization();
 
   bool converged = false;
@@ -823,7 +833,8 @@ void CamCalib::initCamExtrinsics() {
     }
   }
 
-  std::vector<bool> cameras_initialized(vio_dataset->get_num_cams(), false);
+  std::vector<bool> &cameras_initialized = extrinsics_initialized;
+  cameras_initialized.assign(vio_dataset->get_num_cams(), false);
   cameras_initialized[0] = true;
   calib_opt->calib->T_i_c[0] = Sophus::SE3d();  // Identity
 

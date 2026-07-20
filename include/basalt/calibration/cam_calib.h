@@ -142,6 +142,10 @@ class CamCalib {
   DormantCorners dormant_corners;
   DormantPoses dormant_poses;
 
+  // Per-camera result of initCamExtrinsics; cameras that stay false would
+  // enter the optimization with identity extrinsics and derail it.
+  std::vector<bool> extrinsics_initialized;
+
   std::shared_ptr<std::thread> processing_thread;
 
   std::shared_ptr<PosesOptimization> calib_opt;
