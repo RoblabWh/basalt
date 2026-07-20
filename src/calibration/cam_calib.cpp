@@ -400,7 +400,28 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
     return 1;
   }
 
+  if (compute_vignette && compute_response) {
+    std::cerr << "--compute-vignette and --compute-response are mutually "
+                 "exclusive: response estimation runs standalone on a "
+                 "dedicated dataset."
+              << std::endl;
+    return 1;
+  }
+
   loadDataset();
+
+  // Response estimation standalone
+  if (compute_response) {
+    if (!calib_opt || !calib_opt->calibInitialized()) {
+      std::cerr << "No calibration found in the result path. Run camera "
+                   "calibration first."
+                << std::endl;
+      return 1;
+    }
+    computeResp();
+    saveCalib();
+    return 0;
+  }
 
   if (!cornersComplete()) {
     detectCorners();
@@ -461,14 +482,9 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
     }
   }
 
-  if (compute_vignette || compute_response) {
-    computeProjections();
-  }
   if (compute_vignette) {
+    computeProjections();
     computeVign();
-  }
-  if (compute_response) {
-    computeResp();
   }
 
   saveCalib();

@@ -173,7 +173,8 @@ basalt_calibrate_vi --dataset-path ~/tumvi_calib_data/dataset-calib-imu1.bag --d
 
 The GUI parameters described above are available as command line options (defaults match the GUI): `--opt-intr`, `--huber-thresh` and `--stop-thresh` for both `basalt_calibrate_cam` and `basalt_calibrate_vi`; `--opt-poses`, `--opt-cam-time-offset` and `--opt-imu-scale` for `basalt_calibrate_vi` only. In addition:
 * `--max-iterations` limits the number of optimization iterations (default 100).
-* `--compute-vignette` / `--compute-response` (`basalt_calibrate_cam`) run the experimental vignette / response estimation after the optimization, like the `compute_vign` / `compute_resp` buttons.
+* `--compute-vignette` (`basalt_calibrate_cam`) runs the experimental vignette estimation after the optimization, like the `compute_vign` button.
+* `--compute-response` (`basalt_calibrate_cam`) runs the inverse-response estimation, like the `compute_resp` button. It loads the existing `calibration.json` from the result path, updates its `response` field, and writes `pcalib_*.txt`, leaving everything else untouched. Mutually exclusive with `--compute-vignette`.
 * `--save-mocap` (`basalt_calibrate_vi`) enables Mocap optimization and additionally saves `mocap_calibration.json`, like the `init_mocap` and `save_mocap_calib` buttons.
 
 Exit codes: `0` on success, `1` if a pipeline step fails (e.g. no corners detected, or no previous camera calibration found for `basalt_calibrate_vi`), `2` if the optimization did not converge within `--max-iterations` (the current estimate is still saved).

@@ -91,8 +91,9 @@ int main(int argc, char **argv) {
   app.add_flag("--compute-vignette", compute_vignette,
                "Compute vignette after optimization (headless)");
   app.add_flag("--compute-response", compute_response,
-               "Compute inverse response function after optimization "
-               "(headless)");
+               "Compute the inverse response function, using the "
+               "existing calibration.json in the result path; the dataset "
+               "must be an exposure sweep with a static camera (headless)");
 
   try {
     app.parse(argc, argv);
