@@ -652,6 +652,9 @@ void CamCalib::initCamIntrinsics() {
   if (vio_dataset->get_image_timestamps().size() > 100) inc = 3;
 
   for (size_t j = 0; j < vio_dataset->get_num_cams(); j++) {
+    std::vector<double> focal_estimates;
+    Eigen::Vector4d init_intr;
+
     for (size_t i = 0; i < vio_dataset->get_image_timestamps().size();
          i += inc) {
       const int64_t timestamp_ns = vio_dataset->get_image_timestamps()[i];
@@ -668,17 +671,25 @@ void CamCalib::initCamIntrinsics() {
 
         CalibCornerData cid = calib_corners.at(tcid);
 
-        Eigen::Vector4d init_intr;
-
         bool success = CalibHelper::initializeIntrinsics(
             cid.corners, cid.corner_ids, april_grid, img->w, img->h, init_intr);
 
         if (success) {
-          cam_initialized[j] = true;
-          calib_opt->calib->intrinsics[j].setFromInit(init_intr);
-          break;
+          focal_estimates.push_back(init_intr[0]);
         }
       }
+    }
+
+    if (!focal_estimates.empty()) {
+      auto mid = focal_estimates.begin() + focal_estimates.size() / 2;
+      std::nth_element(focal_estimates.begin(), mid, focal_estimates.end());
+      init_intr[0] = init_intr[1] = *mid;
+
+      cam_initialized[j] = true;
+      calib_opt->calib->intrinsics[j].setFromInit(init_intr);
+
+      std::cout << "Cam " << j << ": median focal estimate " << *mid << " from "
+                << focal_estimates.size() << " frames" << std::endl;
     }
   }
 
