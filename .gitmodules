@@ -23,11 +23,9 @@
 [submodule "thirdparty/magic_enum"]
 	path = thirdparty/magic_enum
 	url = https://github.com/Neargye/magic_enum.git
-[submodule "thirdparty/ros2/Fast-CDR"]
+[submodule "thirdparty/Fast-CDR"]
 	path = thirdparty/ros2/Fast-CDR
 	url = https://github.com/eProsima/Fast-CDR.git
-	shallow = true
-[submodule "thirdparty/ros2/mcap"]
+[submodule "thirdparty/mcap"]
 	path = thirdparty/ros2/mcap
 	url = https://github.com/foxglove/mcap.git
-	shallow = true
