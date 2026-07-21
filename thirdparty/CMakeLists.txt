@@ -37,12 +37,14 @@ endmacro()
 add_subdirectory(opengv EXCLUDE_FROM_ALL)
 
 # Hack to disable CPack in Pangolin.
+set(_BASALT_SWALLOW_CPACK_INCLUDE ON)
 macro(include)
-  if(NOT ${ARGV0} STREQUAL "CPack")
+  if(NOT (_BASALT_SWALLOW_CPACK_INCLUDE AND "${ARGV0}" STREQUAL "CPack"))
     _include(${ARGN})
   endif()
 endmacro()
 add_subdirectory(Pangolin EXCLUDE_FROM_ALL)
+set(_BASALT_SWALLOW_CPACK_INCLUDE OFF)
 
 
 # fix aprilgrid
