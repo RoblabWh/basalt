@@ -41,10 +41,10 @@ Build the Docker image and run a container:
 ```
 docker build -t basalt .
 xhost +local:
-docker run -it --rm --env=DISPLAY --env=QT_X11_NO_MITSHM=1 --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume="$HOME":/home/basalt basalt
+docker run -it --rm --env=DISPLAY --env=QT_X11_NO_MITSHM=1 --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume="$HOME":/home/ubuntu basalt
 ```
 
-### Source installation for Ubuntu 18.04, 20.04, 22.04 and macOS >= 10.14 (Mojave)
+### Source installation for Ubuntu >= 18.04 and macOS >= 10.14 (Mojave)
 Build and install the project. For macOS, you should have [Homebrew](https://brew.sh/) installed.
 ```
 ./scripts/install_deps.sh

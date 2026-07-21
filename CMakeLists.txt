@@ -105,10 +105,12 @@ set(CMAKE_CXX_FLAGS_CIRELWITHDEBINFO "-O3 -DEIGEN_INITIALIZE_MATRICES_BY_NAN")  
 
 # base set of compile flags
 set(BASALT_CXX_FLAGS "-Wall -Wextra -Werror -Wno-error=unused-parameter -ftemplate-backtrace-limit=0")
+# Newer libstdc++ no longer transitively includes <cstdint>, so force-include build-wide to fix all such sites at once.
+set(BASALT_CXX_FLAGS "${BASALT_CXX_FLAGS} -include cstdint")
 
 # clang-specific compile flags
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-  set(BASALT_CXX_FLAGS "${BASALT_CXX_FLAGS} -Wno-exceptions -fcolor-diagnostics -frelaxed-template-template-args -Wno-error=deprecated-declarations")
+  set(BASALT_CXX_FLAGS "${BASALT_CXX_FLAGS} -Wno-exceptions -fcolor-diagnostics -frelaxed-template-template-args -Wno-error=deprecated-declarations -Wno-error=unused-private-field -Wno-error=vla-cxx-extension")
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
       # These are disabled to avoid lot's of warnings in Eigen code with clang 10
@@ -130,7 +132,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "App
     add_definitions(-DTBB_USE_GLIBCXX_VERSION=${TBB_USE_GLIBCXX_VERSION})
   endif()
 else()
-  set(BASALT_CXX_FLAGS "${BASALT_CXX_FLAGS} -Wno-error=maybe-uninitialized -Wno-error=implicit-fallthrough")
+  set(BASALT_CXX_FLAGS "${BASALT_CXX_FLAGS} -Wno-error=maybe-uninitialized -Wno-error=implicit-fallthrough -Wno-error=missing-template-keyword")
+  # False-positive in AVX intrinsics on small Eigen types (opengv)
+  set(BASALT_CXX_FLAGS "${BASALT_CXX_FLAGS} -Wno-error=array-bounds")
 
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 9)
       # These are disabled to avoid lot's of warnings in Eigen code with gcc-9
