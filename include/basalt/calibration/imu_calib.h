@@ -14,7 +14,7 @@
 namespace basalt {
 
 class AllanVarianceComputor;
-class AllanDeviations;
+struct AllanDeviations;
 
 struct ImuCalibOptions {
   std::string dataset_path;
