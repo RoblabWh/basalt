@@ -71,7 +71,7 @@ You can also control the process using the following buttons:
 * `show_opt` shows reprojected corners with the current estimate of the intrinsics and poses.
 * `show_vign` toggles the visibility of the points used for vignetting estimation. The points are distributed across white areas of the pattern.
 * `show_ids` toggles the ID visualization for every point.
-* `huber_thresh` controls the threshold for the huber norm in pixels for the optimization.
+* `huber_thresh` controls the threshold for the huber norm in pixels for the optimization. Reducing this value and converging the optimization again after an initial optimization can help refine the calibration.
 * `opt_intr` controls if the optimization can change the intrinsics. For some datasets it might be helpful to disable this option for several first iterations of the optimization.
 * `opt_until_converge` runs the optimization until convergence.
 * `stop_thresh` defines the stopping criterion. Optimization will stop when the maximum increment is smaller than this value.

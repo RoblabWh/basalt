@@ -482,6 +482,18 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
     }
   }
 
+  // Refine the optimization with a lower Huber threshold to improve the
+  // calibration quality.
+  if (converged) {
+    huber_thresh = 0.1;
+    converged = false;
+    iteration = 0;
+    while (!converged && iteration < max_iterations) {
+      converged = optimizeWithParam(true);
+      iteration++;
+    }
+  }
+
   if (compute_vignette) {
     computeProjections();
     computeVign();
