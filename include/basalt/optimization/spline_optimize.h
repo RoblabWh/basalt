@@ -284,6 +284,17 @@ class SplineOptimization {
     aprilgrid_corners_measurements.back().corner_id = corner_id;
   }
 
+  void clearMeasurements() {
+    pose_measurements.clear();
+    gyro_measurements.clear();
+    accel_measurements.clear();
+    aprilgrid_corners_measurements.clear();
+    mocap_measurements.clear();
+
+    min_time_us = std::numeric_limits<int64_t>::max();
+    max_time_us = std::numeric_limits<int64_t>::min();
+  }
+
   Scalar getMinTime() const { return min_time_us * 1e-9; }
   Scalar getMaxTime() const { return max_time_us * 1e-9; }
 

@@ -453,6 +453,8 @@ void CamImuCalib::initOptimization() {
 
   calib_opt->setAprilgridCorners3d(april_grid.aprilgrid_corner_pos_3d);
 
+  calib_opt->clearMeasurements();
+
   for (size_t i = 0; i < vio_dataset->get_accel_data().size(); i++) {
     const basalt::AccelData &ad = vio_dataset->get_accel_data()[i];
     const basalt::GyroData &gd = vio_dataset->get_gyro_data()[i];
