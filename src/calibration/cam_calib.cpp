@@ -680,6 +680,14 @@ void CamCalib::initCamIntrinsics() {
   if (vio_dataset->get_image_timestamps().size() > 100) inc = 3;
 
   for (size_t j = 0; j < vio_dataset->get_num_cams(); j++) {
+    const std::string &model = calib_opt->calib->intrinsics[j].getName();
+    if (model == "pinhole" || model == "pinhole-radtan8") {
+      std::cout << "Cam " << j
+                << ": pinhole model selected, using pinhole initialization."
+                << std::endl;
+      continue;
+    }
+
     std::vector<double> focal_estimates;
     Eigen::Vector4d init_intr;
 

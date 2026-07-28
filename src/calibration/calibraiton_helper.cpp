@@ -372,17 +372,10 @@ bool CalibHelper::initializeIntrinsicsPinhole(
   const double _cu = cols / 2.0 - 0.5;
   const double _cv = rows / 2.0 - 0.5;
 
-  // Z. Zhang, A Flexible New Technique for Camera Calibration, PAMI 2000
+  // Z. Zhang, A Flexible New Technique for Camera Calibration, PAMI 2000.
+  // Solved per frame; the median over frames rejects degenerate views.
 
-  size_t nImages = pinhole_corners.size();
-
-  //  Eigen::MatrixXd A(2 * nImages, 2);
-  //  Eigen::VectorXd b(2 * nImages);
-
-  Eigen::MatrixXd A(nImages * 2, 2);
-  Eigen::VectorXd b(nImages * 2, 1);
-
-  int i = 0;
+  std::vector<double> fx_estimates, fy_estimates;
 
   for (const CalibCornerData *ccd : pinhole_corners) {
     const auto &corners = ccd->corners;
@@ -404,7 +397,9 @@ bool CalibHelper::initializeIntrinsicsPinhole(
 
     cv::Mat H = cv::findHomography(M, imagePoints);
 
-    if (H.empty()) return false;
+    if (H.empty()) {
+      continue;
+    }
 
     // std::cout << H << std::endl;
 
@@ -442,20 +437,39 @@ bool CalibHelper::initializeIntrinsicsPinhole(
       d2[j] *= n[3];
     }
 
-    A(i * 2, 0) = h[0] * v[0];
-    A(i * 2, 1) = h[1] * v[1];
-    A(i * 2 + 1, 0) = d1[0] * d2[0];
-    A(i * 2 + 1, 1) = d1[1] * d2[1];
-    b(i * 2, 0) = -h[2] * v[2];
-    b(i * 2 + 1, 0) = -d1[2] * d2[2];
+    Eigen::Matrix2d A;
+    Eigen::Vector2d b;
 
-    i++;
+    A(0, 0) = h[0] * v[0];
+    A(0, 1) = h[1] * v[1];
+    A(1, 0) = d1[0] * d2[0];
+    A(1, 1) = d1[1] * d2[1];
+    b(0) = -h[2] * v[2];
+    b(1) = -d1[2] * d2[2];
+
+    Eigen::Vector2d f = A.fullPivLu().solve(b);
+
+    if (f(0) > 0 && f(1) > 0 && std::isfinite(f(0)) && std::isfinite(f(1))) {
+      fx_estimates.push_back(sqrt(1.0 / f(0)));
+      fy_estimates.push_back(sqrt(1.0 / f(1)));
+    }
   }
 
-  Eigen::Vector2d f = (A.transpose() * A).ldlt().solve(A.transpose() * b);
+  if (fx_estimates.empty()) {
+    return false;
+  }
 
-  double fx = sqrt(fabs(1.0 / f(0)));
-  double fy = sqrt(fabs(1.0 / f(1)));
+  auto median = [](std::vector<double> &v) {
+    auto mid = v.begin() + v.size() / 2;
+    std::nth_element(v.begin(), mid, v.end());
+    return *mid;
+  };
+
+  const double fx = median(fx_estimates);
+  const double fy = median(fy_estimates);
+
+  std::cout << "Pinhole init: median focal estimate " << fx << " " << fy
+            << " from " << fx_estimates.size() << " frames" << std::endl;
 
   init_intr << fx, fy, _cu, _cv;
 
