@@ -1238,6 +1238,10 @@ void CamCalib::saveCalib() {
       calib_opt->setImuName(vio_dataset->get_imu_name());
     }
 
+    if (vio_dataset && hasCorners()) {
+      calib_opt->setCamOverlaps(computeCamOverlaps());
+    }
+
     calib_opt->saveCalib(cache_path);
 
     std::cout << "Saved calibration in " << cache_path << "calibration.json"
@@ -1435,6 +1439,53 @@ bool CamCalib::cornersComplete() const {
   }
 
   return true;
+}
+
+std::vector<std::vector<size_t>> CamCalib::computeCamOverlaps() const {
+  const size_t num_cams = vio_dataset->get_num_cams();
+
+  std::vector<std::vector<bool>> overlapping(
+      num_cams, std::vector<bool>(num_cams, false));
+
+  for (int64_t timestamp_ns : vio_dataset->get_image_timestamps()) {
+    for (size_t cam_i = 0; cam_i < num_cams; cam_i++) {
+      auto it_i = calib_corners.find(TimeCamId(timestamp_ns, cam_i));
+      if (it_i == calib_corners.end() ||
+          it_i->second.corner_ids.size() < MIN_CORNERS)
+        continue;
+
+      std::vector<int> ids_i = it_i->second.corner_ids;
+      std::sort(ids_i.begin(), ids_i.end());
+
+      for (size_t cam_j = cam_i + 1; cam_j < num_cams; cam_j++) {
+        if (overlapping[cam_i][cam_j]) continue;
+
+        auto it_j = calib_corners.find(TimeCamId(timestamp_ns, cam_j));
+        if (it_j == calib_corners.end() ||
+            it_j->second.corner_ids.size() < MIN_CORNERS)
+          continue;
+
+        size_t num_shared = 0;
+        for (int id : it_j->second.corner_ids) {
+          if (std::binary_search(ids_i.begin(), ids_i.end(), id)) num_shared++;
+        }
+
+        if (num_shared >= MIN_CORNERS) {
+          overlapping[cam_i][cam_j] = true;
+          overlapping[cam_j][cam_i] = true;
+        }
+      }
+    }
+  }
+
+  std::vector<std::vector<size_t>> overlaps(num_cams);
+  for (size_t cam_i = 0; cam_i < num_cams; cam_i++) {
+    for (size_t cam_j = 0; cam_j < num_cams; cam_j++) {
+      if (overlapping[cam_i][cam_j]) overlaps[cam_i].push_back(cam_j);
+    }
+  }
+
+  return overlaps;
 }
 
 }  // namespace basalt

@@ -311,6 +311,10 @@ class PosesOptimization {
     calib->imu_name = name;
   }
 
+  void setCamOverlaps(const std::vector<std::vector<size_t>> &overlaps) {
+    calib->overlaps = overlaps;
+  }
+
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   std::shared_ptr<Calibration<Scalar>> calib;

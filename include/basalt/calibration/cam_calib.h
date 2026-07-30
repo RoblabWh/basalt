@@ -125,6 +125,8 @@ class CamCalib {
  private:
   bool cornersComplete() const;
 
+  std::vector<std::vector<size_t>> computeCamOverlaps() const;
+
   static constexpr int UI_WIDTH = 300;
 
   static constexpr size_t RANSAC_THRESHOLD = 10;
