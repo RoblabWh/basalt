@@ -838,6 +838,33 @@ void CamImuCalib::loadDataset() {
         }
         if (mismatch) std::abort();
       }
+
+      const std::vector<std::string> cam_names = vio_dataset->get_cam_names();
+      const std::vector<std::string> &prev_names = calib_opt->calib->cam_names;
+
+      if (prev_names.size() == cam_names.size()) {
+        for (size_t i = 0; i < cam_names.size(); i++) {
+          if (prev_names[i] != cam_names[i]) {
+            std::cerr << "Error: sensor name mismatch for cam" << i
+                      << ": calibration.json has '" << prev_names[i]
+                      << "' but the dataset provides '" << cam_names[i] << "'"
+                      << std::endl;
+            std::abort();
+          }
+        }
+      }
+
+      const std::string imu_name = vio_dataset->get_imu_name();
+      const std::string &prev_imu_name = calib_opt->calib->imu_name;
+
+      if (!prev_imu_name.empty() && !imu_name.empty() &&
+          prev_imu_name != imu_name) {
+        std::cerr << "Error: sensor name mismatch for the IMU: "
+                  << "calibration.json has '" << prev_imu_name
+                  << "' but the dataset provides '" << imu_name << "'"
+                  << std::endl;
+        std::abort();
+      }
     }
   }
   calib_opt->resetMocapCalib();

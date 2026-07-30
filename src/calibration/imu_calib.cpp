@@ -176,6 +176,14 @@ void ImuCalib::loadDataset() {
       archive(*calib);
       std::cout << "Loaded calibration from: " << cache_path
                 << "calibration.json" << std::endl;
+
+      if (!calib->imu_name.empty() && !imu_name.empty() &&
+          calib->imu_name != imu_name) {
+        std::cerr << "Warning: sensor name mismatch for the IMU: "
+                  << "calibration.json has '" << calib->imu_name
+                  << "' but the dataset provides '" << imu_name << "'"
+                  << std::endl;
+      }
     }
   }
 
@@ -257,6 +265,8 @@ void ImuCalib::fitLines() {
 
 void ImuCalib::saveCalib() {
   if (calib) {
+    calib->imu_name = imu_name;
+
     std::ofstream os(cache_path + "calibration.json");
     cereal::JSONOutputArchive archive(os);
 

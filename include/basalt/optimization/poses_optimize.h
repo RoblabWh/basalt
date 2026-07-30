@@ -303,6 +303,14 @@ class PosesOptimization {
     calib->resolution = resolution;
   }
 
+  void setCamNames(const std::vector<std::string> &names) {
+    calib->cam_names = names;
+  }
+
+  void setImuName(const std::string &name) {
+    calib->imu_name = name;
+  }
+
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   std::shared_ptr<Calibration<Scalar>> calib;

@@ -1233,6 +1233,11 @@ bool CamCalib::optimizeWithParam(bool print_info,
 
 void CamCalib::saveCalib() {
   if (calib_opt) {
+    if (vio_dataset) {
+      calib_opt->setCamNames(vio_dataset->get_cam_names());
+      calib_opt->setImuName(vio_dataset->get_imu_name());
+    }
+
     calib_opt->saveCalib(cache_path);
 
     std::cout << "Saved calibration in " << cache_path << "calibration.json"

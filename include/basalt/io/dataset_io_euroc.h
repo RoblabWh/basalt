@@ -80,6 +80,8 @@ class EurocVioDataset : public VioDataset {
 
   std::vector<std::string> get_cam_names() const { return cam_folders; }
 
+  std::string get_imu_name() const { return "imu0"; }
+
   std::vector<int64_t> &get_image_timestamps() { return image_timestamps; }
   Eigen::aligned_vector<AccelData> &get_accel_data() { return accel_data; }
   Eigen::aligned_vector<GyroData> &get_gyro_data() { return gyro_data; }
