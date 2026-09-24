@@ -244,7 +244,7 @@ void VignetteEstimator::optimize() {
     // compute_error();
     opt_vign();
     // compute_error();
-    std::cout << "Iteration: " << i+1 << '/' << 10 << std::endl;
+    std::cout << "Iteration: " << i + 1 << '/' << 10 << std::endl;
   }
 }
 
@@ -301,6 +301,28 @@ void VignetteEstimator::compute_data_log(
   }
 }
 
+double evaluate_vign(
+    const basalt::RdSpline<1, VignetteEstimator::SPLINE_N> &vign, double r) {
+  return vign.evaluate(std::min(int64_t(r * 1e9), vign.maxTimeNs()))[0];
+}
+
+namespace {
+
+/// @brief Largest radius still inside the image, measured from the optical
+/// center in pixels.
+double max_image_radius(const Eigen::Vector2d &optical_center,
+                        const Eigen::Vector2i &resolution) {
+  double max_radius = 0;
+  for (int x : {0, resolution[0] - 1}) {
+    for (int y : {0, resolution[1] - 1}) {
+      max_radius =
+          std::max(max_radius, (Eigen::Vector2d(x, y) - optical_center).norm());
+    }
+  }
+  return max_radius;
+}
+}  // namespace
+
 void VignetteEstimator::save_vign_png(const std::string &path) {
   for (size_t k = 0; k < vio_dataset->get_num_cams(); k++) {
     ManagedImage<uint16_t> vign_img(resolutions[k][0], resolutions[k][1]);
@@ -310,8 +332,8 @@ void VignetteEstimator::save_vign_png(const std::string &path) {
 
     for (size_t x = 0; x < vign_img.w; x++) {
       for (size_t y = 0; y < vign_img.h; y++) {
-        int64_t loc = (Eigen::Vector2d(x, y) - oc).norm() * 1e9;
-        double val = vign_param[k].evaluate(loc)[0];
+        double val =
+            evaluate_vign(vign_param[k], (Eigen::Vector2d(x, y) - oc).norm());
         if (val < 0.5) continue;
         uint16_t val_int =
             val >= 1.0 ? std::numeric_limits<uint16_t>::max()
@@ -326,6 +348,63 @@ void VignetteEstimator::save_vign_png(const std::string &path) {
 
     cv::Mat img(vign_img.h, vign_img.w, CV_16U, vign_img.ptr);
     cv::imwrite(path + "/vignette_" + std::to_string(k) + ".png", img);
+  }
+}
+
+std::vector<basalt::RdSpline<1, VignetteEstimator::SPLINE_N>> make_linear_vign(
+    const Eigen::aligned_vector<Eigen::Vector2d> &optical_centers,
+    const Eigen::aligned_vector<Eigen::Vector2i> &resolutions) {
+  BASALT_ASSERT(optical_centers.size() == resolutions.size());
+
+  constexpr int N = VignetteEstimator::SPLINE_N;
+  constexpr int64_t knot_spacing = VignetteEstimator::knot_spacing;
+
+  const double knot_spacing_px = knot_spacing / 1e9;
+
+  std::vector<basalt::RdSpline<1, N>> vign_param(optical_centers.size(),
+                                                 RdSpline<1, N>(knot_spacing));
+
+  double max_radius = 0;
+  for (size_t i = 0; i < optical_centers.size(); i++) {
+    max_radius = std::max(max_radius,
+                          max_image_radius(optical_centers[i], resolutions[i]));
+  }
+
+  for (size_t i = 0; i < optical_centers.size(); i++) {
+    const double cam_max_radius =
+        max_image_radius(optical_centers[i], resolutions[i]);
+    size_t j = 0;
+    do {
+      const double r = (double(j) - 1.0) * knot_spacing_px;
+      vign_param[i].knotsPushBack(Eigen::Matrix<double, 1, 1>(
+          std::max(1.0 - r / cam_max_radius, VignetteEstimator::knot_min)));
+      j++;
+    } while (vign_param[i].maxTimeNs() <
+             int64_t(max_radius * 1e9) + knot_spacing);
+  }
+
+  return vign_param;
+}
+
+void compute_vign_data_log(
+    const std::vector<basalt::RdSpline<1, VignetteEstimator::SPLINE_N>>
+        &vign_param,
+    std::vector<std::vector<float>> &vign_data_log) {
+  vign_data_log.clear();
+  if (vign_param.empty()) return;
+
+  int64_t max_radius = std::numeric_limits<int64_t>::max();
+  for (const auto &vign : vign_param) {
+    max_radius = std::min(max_radius, vign.maxTimeNs() / int64_t(1e9));
+  }
+
+  for (int64_t i = 0; i < max_radius; i++) {
+    std::vector<float> log_data;
+    for (const auto &vign : vign_param) {
+      log_data.push_back(evaluate_vign(vign, i));
+      log_data.push_back(0.);
+    }
+    vign_data_log.push_back(log_data);
   }
 }
 }  // namespace basalt

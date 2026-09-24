@@ -91,7 +91,9 @@ CamCalib::CamCalib(const CamCalibOptions &options)
       opt_until_convg("ui.opt_until_converge", false, false, true),
       vign_cutoff("ui.vign_cutoff", false, false, true),
       compute_vign("ui.compute_vign", std::bind(&CamCalib::computeVign, this)),
-      save_calib("ui.save_calib", std::bind(&CamCalib::saveCalib, this)),
+      set_lin_vign("ui.set_lin_vign",
+                   std::bind(&CamCalib::setLinearVign, this)),
+      save_calib("ui.save_calib", std::bind(&CamCalib::saveCalib, this, true)),
       set_lin_resp("ui.set_lin_resp",
                    std::bind(&CamCalib::setLinearResp, this)),
       compute_resp("ui.compute_resp", std::bind(&CamCalib::computeResp, this)) {
@@ -151,6 +153,26 @@ void CamCalib::initGui() {
   plot_display.AddDisplay(*resp_plotter);
 
   setNumCameras(1);
+}
+
+void CamCalib::updateVignPlot(
+    const std::vector<std::vector<float>> &vign_data) {
+  vign_data_log.Clear();
+  for (const auto &v : vign_data) vign_data_log.Log(v);
+
+  if (!show_gui) return;
+
+  vign_plotter->ClearSeries();
+  vign_plotter->ClearMarkers();
+
+  for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
+    vign_plotter->AddSeries("$i", "$" + std::to_string(2 * i),
+                            pangolin::DrawingModeLine, cam_colors[i],
+                            "vignette camera " + std::to_string(i));
+  }
+
+  vign_plotter->SetView(pangolin::XYRangef(
+      0.0f, static_cast<float>(vign_data_log.Samples()), 0.0f, 1.0f));
 }
 
 void CamCalib::computeVign() {
@@ -221,28 +243,35 @@ void CamCalib::computeVign() {
 
   std::vector<std::vector<float>> vign_data;
   ve.compute_data_log(vign_data);
-  vign_data_log.Clear();
-  for (const auto &v : vign_data) vign_data_log.Log(v);
-
-  if (show_gui) {
-    vign_plotter->ClearSeries();
-    vign_plotter->ClearMarkers();
-
-    for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
-      vign_plotter->AddSeries("$i", "$" + std::to_string(2 * i),
-                              pangolin::DrawingModeLine, cam_colors[i],
-                              "vignette camera " + std::to_string(i));
-    }
-
-    vign_plotter->SetView(pangolin::XYRangef(
-        0.0f, static_cast<float>(vign_data_log.Samples()), 0.0f, 1.0f));
-  }
+  updateVignPlot(vign_data);
 
   ve.save_vign_png(cache_path);
 
   calib_opt->setVignette(ve.get_vign_param());
 
   std::cout << "Saved vignette png files to " << cache_path << std::endl;
+}
+
+void CamCalib::setLinearVign() {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
+    std::cerr << "No intrinsics. Calibrate intrinsics first" << std::endl;
+    return;
+  }
+
+  Eigen::aligned_vector<Eigen::Vector2d> optical_centers;
+  for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
+    optical_centers.emplace_back(
+        calib_opt->calib->intrinsics[i].getParam().segment<2>(2));
+  }
+
+  const auto vign_param =
+      make_linear_vign(optical_centers, calib_opt->calib->resolution);
+
+  std::vector<std::vector<float>> vign_data;
+  compute_vign_data_log(vign_param, vign_data);
+  updateVignPlot(vign_data);
+
+  calib_opt->setVignette(vign_param);
 }
 
 void CamCalib::computeResp() {
@@ -274,8 +303,8 @@ void CamCalib::computeResp() {
 
       for (int32_t x = 0; x < w; x++) {
         for (int32_t y = 0; y < h; y++) {
-          int64_t loc = (Eigen::Vector2d(x, y) - oc).norm() * 1e9;
-          double val = calib_opt->calib->vignette[k].evaluate(loc)[0];
+          const double val = evaluate_vign(calib_opt->calib->vignette[k],
+                                           (Eigen::Vector2d(x, y) - oc).norm());
           if (val <
               VignetteEstimator::knot_min + VignetteEstimator::knot_min * 0.1)
             mask[k][y * w + x] = false;
@@ -312,6 +341,13 @@ void CamCalib::computeResp() {
 }
 
 void CamCalib::setLinearResp() {
+  if (!calib_opt || !calib_opt->calibInitialized()) {
+    std::cerr << "No initial intrinsics. Press init_intrinsics initialize "
+                 "intrinsics"
+              << std::endl;
+    return;
+  }
+
   std::vector<std::vector<bool>> mask(vio_dataset->get_num_cams());
   for (size_t i = 0; i < mask.size(); ++i)
     mask[i] = std::vector<bool>(
@@ -392,15 +428,14 @@ void CamCalib::renderingLoop() {
   }
 }
 
-int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
-                          bool compute_response) {
+int CamCalib::runHeadless(const CamCalibHeadlessOptions &opts) {
   if (show_gui) {
     std::cerr << "runHeadless requires construction with show_gui=false."
               << std::endl;
     return 1;
   }
 
-  if (compute_vignette && compute_response) {
+  if (opts.compute_vignette && opts.compute_response) {
     std::cerr << "--compute-vignette and --compute-response are mutually "
                  "exclusive: response estimation runs standalone on a "
                  "dedicated dataset."
@@ -408,18 +443,56 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
     return 1;
   }
 
+  if (opts.compute_vignette && opts.set_linear_vignette) {
+    std::cerr << "--compute-vignette and --set-linear-vignette are mutually "
+                 "exclusive, they both set the vignette."
+              << std::endl;
+    return 1;
+  }
+
+  if (opts.compute_vignette && opts.set_linear_response) {
+    std::cerr << "--compute-vignette and --set-linear-response are mutually "
+                 "exclusive: response estimation runs standalone on a "
+                 "dedicated dataset."
+              << std::endl;
+    return 1;
+  }
+
+  if (opts.compute_response && opts.set_linear_response) {
+    std::cerr << "--compute-response and --set-linear-response are mutually "
+                 "exclusive, they both set the response."
+              << std::endl;
+    return 1;
+  }
+
   loadDataset();
 
-  // Response estimation standalone
-  if (compute_response) {
-    if (!calib_opt || !calib_opt->calibInitialized()) {
+  const bool calib_loaded = calib_opt && calib_opt->calibInitialized();
+
+  // Response estimation runs on a dedicated dataset, so it never recalibrates
+  // and always needs a calibration in the result path.
+  if (opts.compute_response || opts.set_linear_response) {
+    if (!calib_loaded) {
       std::cerr << "No calibration found in the result path. Run camera "
                    "calibration first."
                 << std::endl;
       return 1;
     }
-    computeResp();
-    saveCalib();
+    if (opts.set_linear_vignette) setLinearVign();
+    if (opts.set_linear_response) setLinearResp();
+    if (opts.compute_response) computeResp();
+    saveCalib(false);
+    return 0;
+  }
+
+  // The linear vignette needs nothing but the intrinsics, so it updates an
+  // existing calibration in place and only falls back to a full calibration
+  // run if the result path does not have one yet.
+  if (opts.set_linear_vignette && calib_loaded) {
+    std::cout << "Updating the vignette of the calibration in the result path."
+              << std::endl;
+    setLinearVign();
+    saveCalib(false);
     return 0;
   }
 
@@ -460,7 +533,7 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
 
   bool converged = false;
   int iteration = 0;
-  while (!converged && iteration < max_iterations) {
+  while (!converged && iteration < opts.max_iterations) {
     converged = optimizeWithParam(true);
     iteration++;
   }
@@ -476,7 +549,7 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
 
     converged = false;
     iteration = 0;
-    while (!converged && iteration < max_iterations) {
+    while (!converged && iteration < opts.max_iterations) {
       converged = optimizeWithParam(true);
       iteration++;
     }
@@ -488,21 +561,23 @@ int CamCalib::runHeadless(int max_iterations, bool compute_vignette,
     huber_thresh = 0.1;
     converged = false;
     iteration = 0;
-    while (!converged && iteration < max_iterations) {
+    while (!converged && iteration < opts.max_iterations) {
       converged = optimizeWithParam(true);
       iteration++;
     }
   }
 
-  if (compute_vignette) {
+  if (opts.compute_vignette) {
     computeProjections();
     computeVign();
+  } else if (opts.set_linear_vignette) {
+    setLinearVign();
   }
 
   saveCalib();
 
   if (!converged) {
-    std::cerr << "Optimization did not converge after " << max_iterations
+    std::cerr << "Optimization did not converge after " << opts.max_iterations
               << " iterations. Saved the current estimate." << std::endl;
     return 2;
   }
@@ -1231,15 +1306,15 @@ bool CamCalib::optimizeWithParam(bool print_info,
   return converged;
 }
 
-void CamCalib::saveCalib() {
+void CamCalib::saveCalib(bool refresh_sensor_metadata) {
   if (calib_opt) {
-    if (vio_dataset) {
+    if (refresh_sensor_metadata && vio_dataset) {
       calib_opt->setCamNames(vio_dataset->get_cam_names());
       calib_opt->setImuName(vio_dataset->get_imu_name());
-    }
 
-    if (vio_dataset && hasCorners()) {
-      calib_opt->setCamOverlaps(computeCamOverlaps());
+      if (hasCorners()) {
+        calib_opt->setCamOverlaps(computeCamOverlaps());
+      }
     }
 
     calib_opt->saveCalib(cache_path);

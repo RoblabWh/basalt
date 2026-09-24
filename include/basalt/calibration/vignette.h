@@ -91,4 +91,34 @@ class VignetteEstimator {
   std::vector<double> irradiance;
   std::vector<basalt::RdSpline<1, SPLINE_N>> vign_param;
 };
+
+/// @brief Vignette value at radius @p r (pixels), clamped to the last knot so
+/// radii past the end of the spline keep the outermost value.
+///
+/// An estimated vignette only spans the radii that were actually observed,
+/// which can be shorter than the distance from the optical center to the
+/// farthest image corner, so evaluating one per pixel has to clamp.
+double evaluate_vign(
+    const basalt::RdSpline<1, VignetteEstimator::SPLINE_N> &vign, double r);
+
+/// @brief Radially symmetric linear falloff val(r) = 1 - r / r_max, where r is
+/// the distance from the optical center in pixels and r_max the image radius.
+///
+/// This is not a photometric model and is not a substitute for a measured
+/// vignette. It exists so that a threshold t on the vignette value (as taken by
+/// Calibration::vignette_map) masks everything outside r(t) = (1 - t) * r_max,
+/// which makes the vignette field usable as a tunable, optical-center-centred
+/// radial mask.
+std::vector<basalt::RdSpline<1, VignetteEstimator::SPLINE_N>> make_linear_vign(
+    const Eigen::aligned_vector<Eigen::Vector2d> &optical_centers,
+    const Eigen::aligned_vector<Eigen::Vector2i> &resolutions);
+
+/// @brief Evaluate the vignette splines on integer radii for the GUI plot.
+///
+/// Logs pairs of (value, number of observations) per camera to stay compatible
+/// with VignetteEstimator::compute_data_log.
+void compute_vign_data_log(
+    const std::vector<basalt::RdSpline<1, VignetteEstimator::SPLINE_N>>
+        &vign_param,
+    std::vector<std::vector<float>> &vign_data_log);
 }  // namespace basalt

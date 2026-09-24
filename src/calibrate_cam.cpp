@@ -39,10 +39,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 int main(int argc, char **argv) {
   basalt::CamCalibOptions opts;
+  basalt::CamCalibHeadlessOptions headless_opts;
   bool headless = false;
-  int max_iterations = 100;
-  bool compute_vignette = false;
-  bool compute_response = false;
 
   CLI::App app{"Calibrate IMU"};
 
@@ -86,14 +84,21 @@ int main(int argc, char **argv) {
                  "Huber threshold for optimization (pixels)");
   app.add_option("--stop-thresh", opts.stop_thresh,
                  "Optimization convergence threshold");
-  app.add_option("--max-iterations", max_iterations,
+  app.add_option("--max-iterations", headless_opts.max_iterations,
                  "Maximum number of optimization iterations (headless)");
-  app.add_flag("--compute-vignette", compute_vignette,
+  app.add_flag("--compute-vignette", headless_opts.compute_vignette,
                "Compute vignette after optimization (headless)");
-  app.add_flag("--compute-response", compute_response,
+  app.add_flag("--set-linear-vignette", headless_opts.set_linear_vignette,
+               "Set the vignette to a linear falloff. Updates the existing "
+               "calibration.json in the result path if there is one, "
+               "otherwise the full calibration runs first (headless)");
+  app.add_flag("--compute-response", headless_opts.compute_response,
                "Compute the inverse response function, using the "
                "existing calibration.json in the result path; the dataset "
                "must be an exposure sweep with a static camera (headless)");
+  app.add_flag("--set-linear-response", headless_opts.set_linear_response,
+               "Set the response function to be perfectly linear, using the "
+               "existing calibration.json in the result path (headless)");
 
   try {
     app.parse(argc, argv);
@@ -110,7 +115,7 @@ int main(int argc, char **argv) {
   basalt::CamCalib cv(opts);
 
   if (headless) {
-    return cv.runHeadless(max_iterations, compute_vignette, compute_response);
+    return cv.runHeadless(headless_opts);
   }
 
   cv.renderingLoop();

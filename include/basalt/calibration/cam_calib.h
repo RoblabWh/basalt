@@ -76,6 +76,14 @@ struct CamCalibOptions {
   bool show_gui = true;
 };
 
+struct CamCalibHeadlessOptions {
+  int max_iterations = 100;
+  bool compute_vignette = false;
+  bool set_linear_vignette = false;
+  bool compute_response = false;
+  bool set_linear_response = false;
+};
+
 class CamCalib {
  public:
   explicit CamCalib(const CamCalibOptions &options);
@@ -86,6 +94,8 @@ class CamCalib {
 
   void computeVign();
 
+  void setLinearVign();
+
   void computeResp();
 
   void setLinearResp();
@@ -94,8 +104,7 @@ class CamCalib {
 
   void renderingLoop();
 
-  int runHeadless(int max_iterations, bool compute_vignette,
-                  bool compute_response);
+  int runHeadless(const CamCalibHeadlessOptions &opts);
 
   void computeProjections();
 
@@ -116,13 +125,15 @@ class CamCalib {
   bool optimizeWithParam(bool print_info,
                          std::map<std::string, double> *stats = nullptr);
 
-  void saveCalib();
+  void saveCalib(bool refresh_sensor_metadata = true);
 
   void drawImageOverlay(pangolin::View &v, size_t cam_id);
 
   bool hasCorners() const;
 
  private:
+  void updateVignPlot(const std::vector<std::vector<float>> &vign_data);
+
   bool cornersComplete() const;
 
   std::vector<std::vector<size_t>> computeCamOverlaps() const;
@@ -197,6 +208,7 @@ class CamCalib {
   pangolin::Var<bool> opt_until_convg;
   pangolin::Var<bool> vign_cutoff;
   pangolin::Var<std::function<void(void)>> compute_vign;
+  pangolin::Var<std::function<void(void)>> set_lin_vign;
   pangolin::Var<std::function<void(void)>> save_calib;
   pangolin::Var<std::function<void(void)>> set_lin_resp;
   pangolin::Var<std::function<void(void)>> compute_resp;
