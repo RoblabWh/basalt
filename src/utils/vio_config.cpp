@@ -59,6 +59,7 @@ VioConfig::VioConfig() {
 
   vio_linearization_type = LinearizationType::ABS_QR;
   vio_sqrt_marg = true;
+  vio_init_gravity_window = 0;
 
   vio_max_states = 3;
   vio_max_kfs = 7;
@@ -228,6 +229,10 @@ void serialize(Archive& ar, basalt::VioConfig& config) {
   }
   try {
     ar(CEREAL_NVP(config.optical_flow_min_mean));
+  } catch (const cereal::Exception&) {
+  }
+  try {
+    ar(CEREAL_NVP(config.vio_init_gravity_window));
   } catch (const cereal::Exception&) {
   }
 }

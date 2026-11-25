@@ -60,6 +60,10 @@ struct VioConfig {
   // A camera whose mean brightness (0..1) is below this counts as blind for
   // that frame (lens covered); its tracks are dropped. 0 = off. Optional key.
   float optical_flow_min_mean;
+  // Seconds of accelerometer data before the first frame that are averaged
+  // for the initial gravity direction. A single sample, the default (0), is
+  // off by degrees when propellers shake the camera.
+  double vio_init_gravity_window;
 
   LinearizationType vio_linearization_type;
   bool vio_sqrt_marg;

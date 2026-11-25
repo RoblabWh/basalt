@@ -185,19 +185,43 @@ void SqrtKeypointVioEstimator<Scalar_>::initialize(const Eigen::Vector3d& bg_,
       // curr_frame->t_ns += calib.cam_time_offset_ns;
 
       if (!initialized) {
+        // Gravity from the mean acceleration over the window before the
+        // first frame (window 0: the first sample at or after the frame).
+        const int64_t window_start_ns =
+            curr_frame->t_ns -
+            int64_t(config.vio_init_gravity_window * 1e9);
+        Vec3 accel_sum = Vec3::Zero();
+        int accel_count = 0;
+        if (config.vio_init_gravity_window > 0 &&
+            data->t_ns >= window_start_ns && data->t_ns <= curr_frame->t_ns) {
+          accel_sum += data->accel;
+          accel_count++;
+        }
+
         while (data->t_ns < curr_frame->t_ns) {
           data = popFromImuDataQueue();
           if (!data) break;
           data->accel = calib.calib_accel_bias.getCalibrated(data->accel);
           data->gyro = calib.calib_gyro_bias.getCalibrated(data->gyro);
           // std::cout << "Skipping IMU data.." << std::endl;
+          if (config.vio_init_gravity_window > 0 &&
+              data->t_ns >= window_start_ns && data->t_ns <= curr_frame->t_ns) {
+            accel_sum += data->accel;
+            accel_count++;
+          }
         }
 
         Vec3 vel_w_i_init;
         vel_w_i_init.setZero();
 
+        const Vec3 init_accel =
+            accel_count > 0 ? Vec3(accel_sum / Scalar(accel_count))
+                            : Vec3(data->accel);
+        std::cout << "Initial gravity from " << std::max(accel_count, 1)
+                  << " accelerometer sample(s)" << std::endl;
+
         T_w_i_init.setQuaternion(Eigen::Quaternion<Scalar>::FromTwoVectors(
-            data->accel, Vec3::UnitZ()));
+            init_accel, Vec3::UnitZ()));
 
         last_state_t_ns = curr_frame->t_ns;
         imu_meas[last_state_t_ns] =
