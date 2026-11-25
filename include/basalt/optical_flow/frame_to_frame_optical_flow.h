@@ -35,6 +35,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
+#include <algorithm>
+#include <iostream>
 #include <thread>
 
 #include <sophus/se2.hpp>
@@ -134,6 +136,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
       transforms->input_images = new_img_vec;
 
+      updateBlind(*new_img_vec);
       addPoints();
       filterPoints();
 
@@ -158,7 +161,10 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       new_transforms->observations.resize(calib.intrinsics.size());
       new_transforms->t_ns = t_ns;
 
+      updateBlind(*new_img_vec);
       for (size_t i = 0; i < calib.intrinsics.size(); i++) {
+        // A blind camera's tracks end here; it starts afresh once it sees.
+        if (blind[i]) continue;
         trackPoints(old_pyramid->at(i), pyramid->at(i),
                     transforms->observations[i],
                     new_transforms->observations[i]);
@@ -305,7 +311,71 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     return patch_valid;
   }
 
+  // Marks the cameras whose mean brightness is below optical_flow_min_mean
+  // (lens covered, black frames), which would only make noise tracks.
+  void updateBlind(const OpticalFlowInput& input) {
+    blind.resize(calib.intrinsics.size(), false);
+    if (config.optical_flow_min_mean <= 0) return;
+
+    std::vector<double> mean(calib.intrinsics.size(), 0.0);
+    for (size_t i = 0; i < calib.intrinsics.size(); i++) {
+      const auto& img = *input.img_data[i].img;
+      double sum = 0;
+      size_t n = 0;
+      for (size_t y = 0; y < img.h; y += 4) {
+        for (size_t x = 0; x < img.w; x += 4) {
+          sum += img(x, y);
+          n++;
+        }
+      }
+      mean[i] = n ? sum / n / 65535.0 : 0.0;
+    }
+    // Never all blind: in a dark scene the brightest camera still tracks,
+    // which beats running on the IMU alone.
+    const size_t brightest =
+        std::max_element(mean.begin(), mean.end()) - mean.begin();
+
+    for (size_t i = 0; i < calib.intrinsics.size(); i++) {
+      const bool b = mean[i] < config.optical_flow_min_mean && i != brightest;
+      if (b != blind[i]) {
+        std::cout << "optical flow: cam" << i << (b ? " blind" : " sees again")
+                  << " at t_ns " << t_ns << " (mean " << mean[i] << ")"
+                  << std::endl;
+      }
+      blind[i] = b;
+    }
+  }
+
+  // Non-overlapping cameras: corners in each camera on its own, new ids.
+  void addPointsEachCamera() {
+    for (size_t i = 0; i < calib.intrinsics.size(); i++) {
+      if (blind[i]) continue;
+
+      Eigen::aligned_vector<Eigen::Vector2d> pts;
+      for (const auto& kv : transforms->observations.at(i)) {
+        pts.emplace_back(kv.second.translation().cast<double>());
+      }
+
+      KeypointsData kd;
+      detectKeypoints(pyramid->at(i).lvl(0), kd,
+                      config.optical_flow_detection_grid_size, 1, pts);
+
+      for (size_t j = 0; j < kd.corners.size(); j++) {
+        Eigen::AffineCompact2f transform;
+        transform.setIdentity();
+        transform.translation() = kd.corners[j].cast<Scalar>();
+        transforms->observations.at(i)[last_keypoint_id++] = transform;
+      }
+    }
+  }
+
   void addPoints() {
+    if (config.optical_flow_non_overlapping) {
+      addPointsEachCamera();
+      return;
+    }
+    if (blind[0]) return;
+
     Eigen::aligned_vector<Eigen::Vector2d> pts0;
 
     for (const auto& kv : transforms->observations.at(0)) {
@@ -331,7 +401,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       last_keypoint_id++;
     }
 
-    if (calib.intrinsics.size() > 1) {
+    if (calib.intrinsics.size() > 1 && !blind[1]) {
       trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1);
 
       for (const auto& kv : new_poses1) {
@@ -341,7 +411,9 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
   }
 
   void filterPoints() {
-    if (calib.intrinsics.size() < 2) return;
+    // Without a shared view there is no stereo pair to check.
+    if (calib.intrinsics.size() < 2 || config.optical_flow_non_overlapping)
+      return;
 
     std::set<KeypointId> lm_to_remove;
 
@@ -389,6 +461,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
   size_t frame_counter;
 
   KeypointId last_keypoint_id;
+
+  std::vector<bool> blind;  // per camera, for the current frame
 
   VioConfig config;
   basalt::Calibration<Scalar> calib;

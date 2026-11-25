@@ -36,6 +36,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <basalt/vi_estimator/marg_helper.h>
 #include <basalt/vi_estimator/sqrt_keypoint_vio.h>
 
+#include <unordered_map>
+
 #include <basalt/optimization/accumulator.h>
 #include <basalt/utils/assert.h>
 #include <basalt/utils/system_utils.h>
@@ -333,10 +335,14 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
   // save results
   prev_opt_flow_res[opt_flow_meas->t_ns] = opt_flow_meas;
 
-  // Make new residual for existing keypoints
+  // Make new residual for existing keypoints. With overlapping cameras new
+  // landmarks are hosted in cam0 and the keyframe criterion looks at cam0;
+  // with non-overlapping ones every camera hosts its own and counts.
+  const bool all_cams = config.optical_flow_non_overlapping;
   int connected0 = 0;
   std::map<int64_t, int> num_points_connected;
   std::unordered_set<int> unconnected_obs0;
+  std::unordered_map<int, size_t> unconnected_cam;  // landmark -> host camera
   for (size_t i = 0; i < opt_flow_meas->observations.size(); i++) {
     TimeCamId tcid_target(opt_flow_meas->t_ns, i);
 
@@ -358,10 +364,11 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
         }
         num_points_connected[tcid_host.frame_id]++;
 
-        if (i == 0) connected0++;
+        if (i == 0 || all_cams) connected0++;
       } else {
-        if (i == 0) {
+        if ((i == 0 || all_cams) && unconnected_cam.count(kpt_id) == 0) {
           unconnected_obs0.emplace(kpt_id);
+          unconnected_cam[kpt_id] = i;
         }
       }
     }
@@ -384,10 +391,11 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
     frames_after_kf = 0;
     kf_ids.emplace(last_state_t_ns);
 
-    TimeCamId tcidl(opt_flow_meas->t_ns, 0);
-
     int num_points_added = 0;
     for (int lm_id : unconnected_obs0) {
+      const size_t host_cam = unconnected_cam.at(lm_id);
+      TimeCamId tcidl(opt_flow_meas->t_ns, host_cam);
+
       // Find all observations
       std::map<TimeCamId, KeypointObservation<Scalar>> kp_obs;
 
@@ -416,7 +424,7 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
         if (valid_kp) break;
         TimeCamId tcido = kv_obs.first;
 
-        const Vec2 p0 = opt_flow_meas->observations.at(0)
+        const Vec2 p0 = opt_flow_meas->observations.at(host_cam)
                             .at(lm_id)
                             .translation()
                             .cast<Scalar>();
@@ -427,14 +435,14 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
                             .template cast<Scalar>();
 
         Vec4 p0_3d, p1_3d;
-        bool valid1 = calib.intrinsics[0].unproject(p0, p0_3d);
+        bool valid1 = calib.intrinsics[host_cam].unproject(p0, p0_3d);
         bool valid2 = calib.intrinsics[tcido.cam_id].unproject(p1, p1_3d);
         if (!valid1 || !valid2) continue;
 
         SE3 T_i0_i1 = getPoseStateWithLin(tcidl.frame_id).getPose().inverse() *
                       getPoseStateWithLin(tcido.frame_id).getPose();
-        SE3 T_0_1 =
-            calib.T_i_c[0].inverse() * T_i0_i1 * calib.T_i_c[tcido.cam_id];
+        SE3 T_0_1 = calib.T_i_c[host_cam].inverse() * T_i0_i1 *
+                    calib.T_i_c[tcido.cam_id];
 
         if (T_0_1.translation().squaredNorm() < min_triang_distance2) continue;
 

@@ -54,6 +54,8 @@ VioConfig::VioConfig() {
   optical_flow_levels = 3;
   optical_flow_epipolar_error = 0.005;
   optical_flow_skip_frames = 1;
+  optical_flow_non_overlapping = false;
+  optical_flow_min_mean = 0;
 
   vio_linearization_type = LinearizationType::ABS_QR;
   vio_sqrt_marg = true;
@@ -218,5 +220,15 @@ void serialize(Archive& ar, basalt::VioConfig& config) {
   ar(CEREAL_NVP(config.mapper_use_lm));
   ar(CEREAL_NVP(config.mapper_lm_lambda_min));
   ar(CEREAL_NVP(config.mapper_lm_lambda_max));
+
+  // Optional keys: configs written before they existed load unchanged.
+  try {
+    ar(CEREAL_NVP(config.optical_flow_non_overlapping));
+  } catch (const cereal::Exception&) {
+  }
+  try {
+    ar(CEREAL_NVP(config.optical_flow_min_mean));
+  } catch (const cereal::Exception&) {
+  }
 }
 }  // namespace cereal

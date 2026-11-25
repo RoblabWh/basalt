@@ -53,6 +53,13 @@ struct VioConfig {
   int optical_flow_levels;
   float optical_flow_epipolar_error;
   int optical_flow_skip_frames;
+  // Cameras without a shared view (e.g. back-to-back fisheyes): every camera
+  // detects its own corners, no stereo matching or epipolar filter, and the
+  // VIO hosts landmarks in any camera. Optional key, default false.
+  bool optical_flow_non_overlapping;
+  // A camera whose mean brightness (0..1) is below this counts as blind for
+  // that frame (lens covered); its tracks are dropped. 0 = off. Optional key.
+  float optical_flow_min_mean;
 
   LinearizationType vio_linearization_type;
   bool vio_sqrt_marg;
